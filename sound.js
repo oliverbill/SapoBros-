@@ -24,6 +24,45 @@ window.Sound = (() => {
   function resume() {
     ensure();
     if (ctx && ctx.state === "suspended") ctx.resume();
+    loadVoices();
+  }
+
+  // ---- Vozes dos personagens (clipes do usuário, base64 em voices.js) ----
+  const voiceBuffers = {};   // nome -> AudioBuffer
+  let voicesLoading = false;
+  function b64ToArrayBuffer(dataUri) {
+    const b64 = dataUri.split(",")[1] || "";
+    const bin = atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+  function loadVoices() {
+    if (voicesLoading || !ensure() || !window.VOICES) return;
+    voicesLoading = true;
+    for (const name in window.VOICES) {
+      try {
+        const ab = b64ToArrayBuffer(window.VOICES[name]);
+        // forma com callbacks + trata a promise (alguns navegadores rejeitam
+        // a promise quando o codec AAC não é suportado, ex.: Chromium headless)
+        const p = ctx.decodeAudioData(ab, (buf) => { voiceBuffers[name] = buf; }, () => {});
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) { /* ignora clipe inválido */ }
+    }
+  }
+  function playVoice(name) {
+    if (muted || !ensure()) return;
+    const buf = voiceBuffers[name];
+    if (!buf) return;                      // ainda decodificando ou ausente
+    try {
+      const src = ctx.createBufferSource();
+      const g = ctx.createGain();
+      g.gain.value = 1.4;                  // voz um pouco acima dos efeitos
+      src.buffer = buf;
+      src.connect(g); g.connect(master);
+      src.start();
+    } catch (e) {}
   }
 
   // Uma nota com envelope (ataque rápido + decaimento exponencial).
@@ -117,8 +156,9 @@ window.Sound = (() => {
   }
 
   return {
-    play, resume, startMusic, stopMusic, setMuted,
+    play, playVoice, resume, startMusic, stopMusic, setMuted,
     isMuted: () => muted,
     isMusicOn: () => musicOn,
+    hasVoice: (name) => !!voiceBuffers[name],
   };
 })();

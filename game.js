@@ -23,6 +23,7 @@
   const snd = (n) => { if (window.Sound) window.Sound.play(n); };
   const musicStart = () => { if (window.Sound) window.Sound.startMusic(); };
   const musicStop  = () => { if (window.Sound) window.Sound.stopMusic(); };
+  const voice = (n) => { if (window.Sound && window.Sound.playVoice) window.Sound.playVoice(n); };
 
   // ---- Screens ----
   const startScreen = document.getElementById("startScreen");
@@ -45,8 +46,8 @@
   // estiver presente, cai para os arquivos em assets/.
   const S = (typeof window !== "undefined" && window.SPRITES) || {};
   const CHARACTERS = [
-    { name:"Rex",  src:S.rex  || "assets/rex.png",  spark:"#ffd23f", nativeFacing:1, img:null, ready:false },
-    { name:"Lima", src:S.lima || "assets/lima.png", spark:"#ffd23f", nativeFacing:1, img:null, ready:false },
+    { name:"Jones", voice:"jones", src:S.rex  || "assets/rex.png",  spark:"#ffd23f", nativeFacing:1, img:null, ready:false },
+    { name:"Minja", voice:"minja", src:S.lima || "assets/lima.png", spark:"#ffd23f", nativeFacing:1, img:null, ready:false },
   ];
   let chosen = 0;
 
@@ -529,6 +530,8 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
           spawnPop(e.x + e.w/2, e.y + e.h/2);
           snd("stomp");
         } else if (p.invuln <= 0) {
+          // voz do Minja ao se encrencar (esbarrar/levar dano de um inimigo)
+          if (chosen === 1) voice("minja_trouble");
           if (p.power !== "small") {
             // perde o poder em vez de morrer (estilo Mario)
             setPower("small");
@@ -622,6 +625,8 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       score += 200;
       snd("powerup");
     }
+    // voz do personagem ao pegar cogumelo/flor
+    voice(CHARACTERS[chosen].voice);
     updateHUD();
   }
 

@@ -1,10 +1,11 @@
 # 🐸 Sapo Bros — Aventura no Bosque
 
 Um jogo de plataforma em HTML5 no estilo **Super Mario Bros**, protagonizado por
-dois sapos **recortados diretamente de uma foto**: **Rex** (verde, jaqueta
-vermelha, laço amarelo) e **Lima** (verde-claro, camisa amarela, laço amarelo).
+dois sapos **recortados diretamente de uma foto**: **Jones** (verde, jaqueta
+vermelha, laço amarelo) e **Minja** (verde-claro, camisa amarela, laço amarelo).
 Os sprites em `assets/rex.png` e `assets/lima.png` foram extraídos da foto com
-remoção de fundo (segmentação GrabCut), preservando a arte original.
+remoção de fundo (segmentação GrabCut), preservando a arte original. Cada
+personagem tem uma **voz** própria que toca ao pegar um cogumelo ou flor.
 
 ## 🎮 Jogar agora
 
@@ -71,7 +72,7 @@ progresso.
 
 ## Opções
 
-- **Escolha do personagem**: selecione **Rex** ou **Lima** na tela inicial. A
+- **Escolha do personagem**: selecione **Jones** ou **Minja** na tela inicial. A
   escolha é lembrada entre as sessões.
 - **♾️ Vidas infinitas**: ative o botão na tela inicial (ou durante o jogo) para
   jogar sem perder — ao cair ou ser atingido, você simplesmente renasce. O HUD

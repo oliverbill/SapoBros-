@@ -1,7 +1,7 @@
 {
   "name": "Sapo Bros — Aventura no Bosque",
   "short_name": "Sapo Bros",
-  "description": "Jogo de plataforma estilo Super Mario Bros com os sapos Rex e Lima.",
+  "description": "Jogo de plataforma estilo Super Mario Bros com os sapos Jones e Minja.",
   "start_url": "./index.html",
   "display": "fullscreen",
   "orientation": "landscape",

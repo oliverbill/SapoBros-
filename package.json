@@ -1,7 +1,7 @@
 {
   "name": "sapo-bros",
   "version": "1.0.0",
-  "description": "Jogo de plataforma HTML5 estilo Super Mario Bros com os sapos Rex e Lima.",
+  "description": "Jogo de plataforma HTML5 estilo Super Mario Bros com os sapos Jones e Minja.",
   "private": true,
   "type": "module",
   "scripts": {

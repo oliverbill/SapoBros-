@@ -69,7 +69,10 @@ try {
     check("título é 'Sapo Bros'", (await page.title()).includes("Sapo Bros"));
     check("hook de debug ativo", await page.evaluate(() => !!window.__DINO));
     check("dois personagens na seleção", (await page.$$("#charPick .char")).length === 2);
+    const names = await page.evaluate(() => Array.from(document.querySelectorAll("#charPick .char b")).map(b => b.textContent));
+    check("personagens renomeados p/ Jones e Minja", names.join(",") === "Jones,Minja", JSON.stringify(names));
     check("motor de som carregado", await page.evaluate(() => typeof window.Sound === "object"));
+    check("vozes embutidas (Jones/Minja + encrencado)", await page.evaluate(() => !!(window.VOICES && window.VOICES.jones && window.VOICES.minja && window.VOICES.minja_trouble)));
     await ctx.close();
   }
 
@@ -84,6 +87,11 @@ try {
     });
     check("cogumelo cresce o personagem", r.h1 > r.h0 && r.power === "big", JSON.stringify(r));
     check("HUD mostra 🍄", r.hud === "🍄", r.hud);
+    const voiceOk = await page.evaluate(() => {
+      try { return typeof window.Sound.playVoice === "function" && (window.Sound.playVoice("jones"), true); }
+      catch (e) { return false; }
+    });
+    check("API de voz do personagem funciona (sem erro)", voiceOk);
     await ctx.close();
   }
 
@@ -218,7 +226,10 @@ try {
     await ctx.close();
   }
 
-  check("sem erros de runtime no console/página", pageErrors.length === 0, pageErrors.join(" | "));
+  // O Chromium headless (CI) não decodifica AAC/m4a — as vozes tocam no Safari.
+  // Ignoramos SÓ esse erro conhecido de codec; qualquer outro reprova o teste.
+  const realErrors = pageErrors.filter((e) => !/decode audio data/i.test(e));
+  check("sem erros de runtime no console/página", realErrors.length === 0, realErrors.join(" | "));
 } finally {
   await browser.close();
   server.close();

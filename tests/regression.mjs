@@ -87,11 +87,17 @@ try {
     });
     check("cogumelo cresce o personagem", r.h1 > r.h0 && r.power === "big", JSON.stringify(r));
     check("HUD mostra 🍄", r.hud === "🍄", r.hud);
+    // MP3 decodifica no Chromium — a voz deve ficar pronta e tocar sem erro
+    const decoded = await page.evaluate(async () => {
+      for (let i = 0; i < 30 && !window.Sound.hasVoice("jones"); i++) await new Promise(r => setTimeout(r, 50));
+      return window.Sound.hasVoice("jones");
+    });
+    check("voz decodifica (buffer pronto)", decoded === true);
     const voiceOk = await page.evaluate(() => {
       try { return typeof window.Sound.playVoice === "function" && (window.Sound.playVoice("jones"), true); }
       catch (e) { return false; }
     });
-    check("API de voz do personagem funciona (sem erro)", voiceOk);
+    check("tocar a voz do personagem não gera erro", voiceOk);
     await ctx.close();
   }
 

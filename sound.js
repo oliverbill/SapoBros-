@@ -25,46 +25,44 @@ window.Sound = (() => {
     ensure();
     if (ctx && ctx.state === "suspended") ctx.resume();
     loadVoices();
-    unlockVoices();
   }
 
-  // ---- Vozes dos personagens (clipes do usuário, base64 em voices.js) ----
-  // Usamos elementos <audio> nativos em vez de decodeAudioData, porque o
-  // Safari do iPhone reproduz AAC/m4a de forma confiável por essa via.
-  const voiceEls = {};       // nome -> HTMLAudioElement
-  let voicesInit = false;
+  // ---- Vozes dos personagens (clipes do usuário, base64 MP3 em voices.js) ----
+  // Tocam pelo MESMO caminho dos efeitos (Web Audio), que já funciona no iPhone.
+  // MP3 é decodificado com segurança pelo decodeAudioData no Safari e no Chrome.
+  const voiceBuffers = {};   // nome -> AudioBuffer
+  let voicesLoading = false;
+  function b64ToArrayBuffer(dataUri) {
+    const b64 = dataUri.split(",")[1] || "";
+    const bin = atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
   function loadVoices() {
-    if (voicesInit || !window.VOICES) return;
-    voicesInit = true;
+    if (voicesLoading || !ensure() || !window.VOICES) return;
+    voicesLoading = true;
     for (const name in window.VOICES) {
       try {
-        const el = new Audio();
-        el.preload = "auto";
-        el.src = window.VOICES[name];
-        el.load();
-        voiceEls[name] = el;
+        const ab = b64ToArrayBuffer(window.VOICES[name]);
+        const p = ctx.decodeAudioData(ab, (buf) => { voiceBuffers[name] = buf; }, () => {});
+        if (p && typeof p.then === "function") p.then((buf) => { voiceBuffers[name] = buf; }).catch(() => {});
       } catch (e) { /* clipe inválido */ }
     }
   }
-  // Desbloqueia a reprodução no iOS: toca mudo e pausa dentro do gesto.
-  function unlockVoices() {
-    for (const name in voiceEls) {
-      const el = voiceEls[name];
-      try {
-        el.muted = true;
-        const p = el.play();
-        if (p && p.then) p.then(() => { el.pause(); el.currentTime = 0; el.muted = false; })
-                          .catch(() => { el.muted = false; });
-        else { el.muted = false; }
-      } catch (e) { el.muted = false; }
-    }
-  }
   function playVoice(name) {
-    if (muted) return;
-    const el = voiceEls[name];
-    if (!el) return;
-    try { el.currentTime = 0; const p = el.play(); if (p && p.catch) p.catch(() => {}); }
-    catch (e) {}
+    if (muted || !ensure()) return;
+    const buf = voiceBuffers[name];
+    if (!buf) return;                    // ainda decodificando ou ausente
+    try {
+      const src = ctx.createBufferSource();
+      const g = ctx.createGain();
+      g.gain.value = 2.2;                // voz acima da música/efeitos
+      src.buffer = buf;
+      src.connect(g); g.connect(master);
+      src.start();
+    } catch (e) {}
   }
 
   // Uma nota com envelope (ataque rápido + decaimento exponencial).
@@ -161,6 +159,6 @@ window.Sound = (() => {
     play, playVoice, resume, startMusic, stopMusic, setMuted,
     isMuted: () => muted,
     isMusicOn: () => musicOn,
-    hasVoice: (name) => !!voiceEls[name],
+    hasVoice: (name) => !!voiceBuffers[name],
   };
 })();

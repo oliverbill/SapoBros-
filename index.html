@@ -62,12 +62,13 @@
     pointer-events:none;
   }
   #hud .box { background:rgba(0,0,0,.28); padding:5px 12px; border-radius:8px; }
-  /* Touch controls */
+  /* Touch controls — centralizados verticalmente nas laterais (bom p/ paisagem)
+     e respeitando a área segura do iPhone (notch/home indicator). */
   #touch { position:absolute; inset:0; display:none; pointer-events:none; }
   #touch.on { display:block; }
-  .pad { position:absolute; bottom:16px; pointer-events:auto; display:flex; gap:12px; }
-  .pad.left { left:14px; }
-  .pad.right { right:14px; }
+  .pad { position:absolute; top:50%; transform:translateY(-50%); pointer-events:auto; display:flex; gap:14px; }
+  .pad.left  { left:calc(16px + env(safe-area-inset-left, 0px)); }
+  .pad.right { right:calc(16px + env(safe-area-inset-right, 0px)); }
   .tbtn {
     width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.22);
     border:2px solid rgba(255,255,255,.5); color:#fff; font-size:26px; font-weight:900;

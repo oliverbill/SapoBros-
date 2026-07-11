@@ -554,9 +554,8 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       if (it.taken) continue;
       it.phase += 0.1;
 
+      // Movimento horizontal: só o cogumelo anda (e vira nas paredes)
       if (it.type === "mushroom") {
-        // cogumelo anda e cai, virando nas paredes (estilo Mario)
-        it.vy += GRAVITY; if (it.vy > 14) it.vy = 14;
         it.x += it.vx;
         for (const s of solids) {
           if (rectsOverlap(it, s)) {
@@ -564,15 +563,19 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
             it.vx *= -1;
           }
         }
-        it.y += it.vy;
-        for (const s of solids) {
-          if (rectsOverlap(it, s)) {
-            if (it.vy > 0) { it.y = s.y - it.h; it.vy = 0; }
-            else { it.y = s.y + s.h; it.vy = 0; }
-          }
-        }
         if (it.x < 0) { it.x = 0; it.vx *= -1; }
         if (it.x + it.w > levelW) { it.x = levelW - it.w; it.vx *= -1; }
+      }
+
+      // Gravidade para TODOS os itens: sempre pousam sobre o chão/plataforma,
+      // nunca ficam enterrados (corrige a flor "enterrada").
+      it.vy += GRAVITY; if (it.vy > 14) it.vy = 14;
+      it.y += it.vy;
+      for (const s of solids) {
+        if (rectsOverlap(it, s)) {
+          if (it.vy > 0) { it.y = s.y - it.h; it.vy = 0; }
+          else { it.y = s.y + s.h; it.vy = 0; }
+        }
       }
 
       // coleta

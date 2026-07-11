@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Sapo Bros — Aventura no Bosque</title>
 <!-- App na tela de início do iPhone (Safari > Compartilhar > Adicionar à Tela de Início) -->
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -158,8 +159,9 @@
   </div>
 </div>
 
-<script src="assets.js"></script>
-<script src="sound.js"></script>
-<script src="game.js"></script>
+<!-- ?v= força o navegador a baixar a versão nova (evita cache antigo). Bumpe ao atualizar. -->
+<script src="assets.js?v=7"></script>
+<script src="sound.js?v=7"></script>
+<script src="game.js?v=7"></script>
 </body>
 </html>

@@ -1134,7 +1134,11 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       give: (t) => collectPower(t),
       fireballs: () => fireballs,
       powerups: () => powerups,
+      coins: () => coins,
+      enemies: () => enemies,
+      solids: () => solids,
       get state() { return state; },
+      get levelH() { return levelH; },
     };
   }
 

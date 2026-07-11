@@ -1,0 +1,13 @@
+{
+  "name": "sapo-bros",
+  "version": "1.0.0",
+  "description": "Jogo de plataforma HTML5 estilo Super Mario Bros com os sapos Rex e Lima.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/regression.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

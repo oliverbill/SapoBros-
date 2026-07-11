@@ -155,8 +155,14 @@ window.Sound = (() => {
     if (muted) stopMusic();
   }
 
+  // Pré-decodifica as vozes já no carregamento (não depende de gesto):
+  // assim os buffers ficam prontos antes do primeiro power-up, evitando
+  // que a voz saia muda por corrida de tempo (ex.: cogumelo logo no início).
+  try { loadVoices(); } catch (e) {}
+
   return {
     play, playVoice, resume, startMusic, stopMusic, setMuted,
+    preloadVoices: loadVoices,
     isMuted: () => muted,
     isMusicOn: () => musicOn,
     hasVoice: (name) => !!voiceBuffers[name],

@@ -73,6 +73,13 @@ try {
     check("personagens renomeados p/ Jones e Minja", names.join(",") === "Jones,Minja", JSON.stringify(names));
     check("motor de som carregado", await page.evaluate(() => typeof window.Sound === "object"));
     check("vozes embutidas (Jones/Minja + encrencado)", await page.evaluate(() => !!(window.VOICES && window.VOICES.jones && window.VOICES.minja && window.VOICES.minja_trouble)));
+    // Pré-decodificação no carregamento: TODAS as vozes prontas antes de iniciar
+    const preDecoded = await page.evaluate(async () => {
+      const need = ["jones", "minja", "minja_trouble"];
+      for (let i = 0; i < 40 && !need.every(n => window.Sound.hasVoice(n)); i++) await new Promise(r => setTimeout(r, 50));
+      return need.map(n => [n, window.Sound.hasVoice(n)]);
+    });
+    check("todas as vozes pré-decodificam no load (Jones incluso)", preDecoded.every(([, ok]) => ok), JSON.stringify(preDecoded));
     await ctx.close();
   }
 

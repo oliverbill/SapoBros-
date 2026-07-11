@@ -257,6 +257,37 @@ try {
     await ctx.close();
   }
 
+  // ---------- 12. Modo invencível (não morre) ----------
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#invincibleToggle"); await sleep(30);   // liga o modo
+    await page.click("#startBtn"); await sleep(200);
+    const hud = await page.evaluate(() => document.getElementById("lives").textContent);
+    check("HUD mostra escudo no modo invencível", hud === "🛡️", hud);
+
+    // colide de lado com um inimigo (sem pisar): não deve tomar dano nem morrer
+    const enemyHit = await page.evaluate(async () => {
+      const e = window.__DINO.enemies().find(e => e.alive);
+      const pl = window.__DINO.player;
+      const pw0 = pl.power;
+      pl.power = "fire";                       // com poder, para detectar "powerdown"
+      pl.x = e.x - pl.w + 2; pl.y = e.y; pl.vy = 0;   // encosta de lado
+      await new Promise(r => setTimeout(r, 250));
+      return { dead: pl.dead, power: pl.power, wasFire: pw0 };
+    });
+    check("invencível: não toma dano ao esbarrar em inimigo", enemyHit.dead === false && enemyHit.power === "fire", JSON.stringify(enemyHit));
+
+    // cai num buraco: não morre — volta a um ponto seguro
+    const pit = await page.evaluate(async () => {
+      const pl = window.__DINO.player;
+      pl.y = window.__DINO.levelH + 200;       // joga para fora do mundo
+      await new Promise(r => setTimeout(r, 200));
+      return { dead: pl.dead, inside: pl.y < window.__DINO.levelH, state: window.__DINO.state };
+    });
+    check("invencível: cair no buraco não mata (volta ao chão)", pit.dead === false && pit.inside === true && pit.state === "play", JSON.stringify(pit));
+    await ctx.close();
+  }
+
   // O Chromium headless (CI) não decodifica AAC/m4a — as vozes tocam no Safari.
   // Ignoramos só erros de codec de áudio; qualquer outro reprova o teste.
   const realErrors = pageErrors.filter((e) => !/decode audio data|no supported source|supported sources|NotSupportedError|failed to load because/i.test(e));

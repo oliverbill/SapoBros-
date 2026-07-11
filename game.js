@@ -145,6 +145,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   let levelIdx = 0;
   let score = 0, lives = 3;
   let infinite = false;          // modo vidas infinitas
+  let invincible = false;        // modo invencível (não morre nunca)
   let audioMuted = false;        // som ligado/desligado
   const START_LIVES = 3;
   const SAVE_KEY = "sapobros_save_v1";
@@ -164,7 +165,8 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     onGround:false, face:1, walk:0, dead:false, deadT:0, blink:0, spawnX:0, spawnY:0,
     power:"small",            // small | big | fire | fly
     invuln:0,                 // quadros de invulnerabilidade após tomar dano
-    fireCd:0                  // recarga do tiro de fogo
+    fireCd:0,                 // recarga do tiro de fogo
+    safeX:0, safeY:0          // última posição segura no chão (modo invencível)
   };
 
   // Troca o poder ajustando o tamanho, mantendo os pés no chão e o centro.
@@ -263,6 +265,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     player.vx = 0; player.vy = 0; player.dead = false; player.deadT = 0;
     player.face = 1; player.walk = 0; player.onGround = false;
     player.invuln = 0; player.fireCd = 0;
+    player.safeX = player.spawnX; player.safeY = player.spawnY;
     fireballs = [];
   }
 
@@ -273,7 +276,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     const inProgress = (state === "play" || state === "dead" || state === "levelend" || state === "paused");
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify({
-        chosen, infinite, muted: audioMuted,   // preferências (sempre)
+        chosen, infinite, invincible, muted: audioMuted,   // preferências (sempre)
         inProgress,                       // há um jogo em andamento?
         levelIdx, score, lives: isFinite(lives) ? lives : START_LIVES,
         power: player.power,              // poder atual (cogumelo/fogo/voo)
@@ -306,6 +309,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       if (s) {
         chosen   = s.chosen ?? chosen;
         infinite = !!s.infinite;
+        invincible = !!s.invincible;
         levelIdx = s.levelIdx ?? 0;
         score    = s.score ?? 0;
         lives    = infinite ? Infinity : (s.lives ?? START_LIVES);
@@ -399,7 +403,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   function updateHUD() {
     $score.textContent = score;
     $level.textContent = levelIdx + 1;
-    $lives.textContent = infinite ? "∞" : lives;
+    $lives.textContent = invincible ? "🛡️" : (infinite ? "∞" : lives);
     if ($power) $power.textContent = POWER_ICON[player.power] || "—";
     if ($powerBox) $powerBox.style.background = POWER_BG[player.power] || POWER_BG.small;
     if ($btnFire) $btnFire.classList.toggle("hidden", player.power !== "fire");
@@ -471,6 +475,9 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     if (p.onGround && Math.abs(p.vx) > 0.4) p.walk += Math.abs(p.vx) * 0.06;
     else p.walk = 0;
     p.blink = (p.blink + 1) % 220;
+
+    // Guarda a última posição segura no chão (usada no modo invencível)
+    if (p.onGround && p.y < levelH - TILE) { p.safeX = p.x; p.safeY = p.y; }
 
     // World bounds
     if (p.x < 0) { p.x = 0; p.vx = 0; }
@@ -560,7 +567,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
           score += 100; updateHUD();
           spawnPop(e.x + e.w/2, e.y + e.h/2);
           snd("stomp");
-        } else if (p.invuln <= 0) {
+        } else if (p.invuln <= 0 && !invincible) {
           // voz do Minja ao se encrencar (esbarrar/levar dano de um inimigo)
           if (chosen === 1) voice("minja_trouble");
           if (p.power !== "small") {
@@ -595,6 +602,13 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
   function killPlayer() {
     if (player.dead) return;
+    if (invincible) {
+      // modo invencível: não morre — volta ao último chão seguro
+      player.x = player.safeX; player.y = player.safeY - 2;
+      player.vx = 0; player.vy = 0;
+      spawnDust(player.x + player.w/2, player.y + player.h);
+      return;
+    }
     player.dead = true;
     player.deadT = 0;
     player.vy = -9;
@@ -1077,6 +1091,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   // ============================================================
   const continueBtn = document.getElementById("continueBtn");
   const infiniteChk = document.getElementById("infiniteChk");
+  const invincibleChk = document.getElementById("invincibleChk");
 
   // Reflete um save existente na tela inicial (personagem, modo e botão continuar)
   function refreshStartScreen() {
@@ -1092,9 +1107,11 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     if (s) {
       chosen = s.chosen ?? chosen;
       infinite = !!s.infinite;
+      invincible = !!s.invincible;
       applyMute(!!s.muted);
     }
     infiniteChk.checked = infinite;
+    invincibleChk.checked = invincible;
     charEls.forEach(e => e.classList.toggle("sel", parseInt(e.dataset.char, 10) === chosen));
   }
 
@@ -1108,6 +1125,12 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       else if (!isFinite(lives)) lives = START_LIVES;   // volta a um valor finito
       updateHUD();
     }
+    saveProgress();
+  });
+
+  invincibleChk.addEventListener("change", () => {
+    invincible = invincibleChk.checked;
+    if (state === "play" || state === "paused") updateHUD();
     saveProgress();
   });
 

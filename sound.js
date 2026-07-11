@@ -58,7 +58,7 @@ window.Sound = (() => {
     try {
       const src = ctx.createBufferSource();
       const g = ctx.createGain();
-      g.gain.value = 2.2;                // voz acima da música/efeitos
+      g.gain.value = 3.0;                // voz bem acima da música/efeitos
       src.buffer = buf;
       src.connect(g); g.connect(master);
       src.start();

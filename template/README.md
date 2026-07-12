@@ -104,6 +104,38 @@ legend: {
 - Uma fase **com chefão** termina ao derrotá-lo (arena). Ponha paredes `B`,
   `L` (lava) e `^` (espinhos) para montar a arena — veja a fase 3 do exemplo.
 
+## Mapa de fases e vidas infinitas
+
+- **Mapa de fases (trilha):** com 2+ fases, o jogo abre um mapa em trilha
+  sinuosa onde você escolhe a fase (as próximas vão desbloqueando). Fases de
+  chefão aparecem com 👑. Para desligar e ir direto (linear), ponha
+  `worldMap: false` na config.
+- **Vidas infinitas:** há um interruptor na tela inicial. Para já vir ligado,
+  use `infiniteLives: true` na config.
+
+## Vários exemplos / estilos
+
+Além de `game.config.js`, há exemplos prontos em `examples/`. Para ver um sem
+sobrescrever o seu, abra `index.html?config=NOME` (sem a extensão). Ex.:
+
+```
+index.html?config=espaco   →  carrega examples/espaco.config.js (tema sci-fi)
+```
+
+Use um exemplo como ponto de partida: copie-o para `game.config.js` e edite.
+
+## Validar a configuração (evita erros bobos)
+
+Antes de rodar, rode o validador — ele aponta imagem/áudio faltando,
+`behavior` inválido, letra de mapa sem legenda, fase sem início/fim, etc.:
+
+```
+node tools/validate.mjs                      # valida game.config.js
+node tools/validate.mjs examples/espaco.config.js
+```
+
+Ele sai com código de erro se houver problema grave (bom para automação).
+
 ## Power-ups
 
 `effect` define o efeito ao coletar:

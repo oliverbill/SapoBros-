@@ -46,6 +46,7 @@
   <div id="startScreen" class="overlay">
     <h1 id="title">Meu Jogo</h1>
     <div class="char-pick" id="playerPick"></div>
+    <label class="hint" style="cursor:pointer;font-size:15px"><input type="checkbox" id="infiniteChk"> ♾️ Vidas infinitas</label>
     <button class="btn" id="startBtn">▶ Começar</button>
     <p class="hint">← → mover · ↑ / Espaço pular · F atirar · (ou botões na tela)</p>
   </div>
@@ -62,8 +63,17 @@
   </div>
 </div>
 
-<!-- 1) Sua configuração (edite este arquivo).  2) O motor (não edite). -->
-<script src="game.config.js"></script>
-<script src="engine.js"></script>
+<!-- Carrega a config (game.config.js por padrão, ou examples/NOME.config.js
+     via ?config=NOME) e, em seguida, o motor. -->
+<script>
+  (function () {
+    var name = new URLSearchParams(location.search).get("config");
+    var src = name ? "examples/" + name + ".config.js" : "game.config.js";
+    var cfg = document.createElement("script"); cfg.src = src;
+    cfg.onload = function () { var e = document.createElement("script"); e.src = "engine.js"; document.body.appendChild(e); };
+    cfg.onerror = function () { document.body.insertAdjacentHTML("beforeend", "<p style='color:#fff;font-family:sans-serif;padding:20px'>Não achei " + src + "</p>"); };
+    document.body.appendChild(cfg);
+  })();
+</script>
 </body>
 </html>

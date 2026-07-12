@@ -108,6 +108,12 @@
     "G": "ground", "B": "brick", "?": "coin", "P": "spawn", "F": "flag", "L": "lava", "^": "spike", ".": "empty", " ": "empty",
   }, CFG.legend || {});
 
+  // Mapa de fases (trilha) + vidas infinitas (opcionais)
+  const worldMapOn = CFG.worldMap !== false && (CFG.levels || []).length > 1;
+  let infinite = !!CFG.infiniteLives, unlocked = 0, mapSel = 0;
+  const LEVEL_IS_BOSS = (CFG.levels || []).map(L => (L.map || "").split("").some(ch => LEGEND[ch] && LEGEND[ch].boss));
+  const MAP_NODES = buildMapNodes((CFG.levels || []).length);
+
   function sizeFor(power) { const b = players[chosen]; const w = b.w || 30, h = b.h || 38; return power === "small" ? { w, h: Math.round(h * 0.72) } : { w, h }; }
 
   // ---------- Construção de fase ----------
@@ -353,13 +359,18 @@
   // ---------- Dano / morte ----------
   function hurtPlayer() { const p = player; if (p.invuln > 0 || p.dead) return; voiceEvent("hurt"); if (p.power !== "small") { setPower("small"); p.invuln = 100; p.vy = -6; SFX.hit(); } else killPlayer(); }
   function killPlayer() { if (player.dead) return; player.dead = true; player.deadT = 0; player.vy = -9; stopMusic(); SFX.die(); voiceEvent("die"); }
-  function loseLife() { lives--; if (lives <= 0) { state = "gameover"; showMsg("💀 Fim de jogo", "Pontuação: " + score, "🔁 Recomeçar"); } else { respawn(true); state = "play"; playMusic(CFG.music && CFG.music[curTheme]); } }
+  function loseLife() {
+    if (infinite) { respawn(true); state = "play"; playMusic(CFG.music && CFG.music[curTheme]); return; }
+    lives--; if (lives <= 0) { state = "gameover"; showMsg("💀 Fim de jogo", "Pontuação: " + score, "🔁 Recomeçar"); }
+    else { respawn(true); state = "play"; playMusic(CFG.music && CFG.music[curTheme]); }
+  }
   function voiceEvent(ev) { const map = CFG.voiceEvents || {}; if (map[ev]) playVoice(map[ev] === "@player" ? players[chosen].voice : map[ev]); }
 
   function levelComplete() {
     stopMusic(); SFX.win();
+    unlocked = Math.max(unlocked, Math.min(levelIdx + 1, CFG.levels.length - 1));
     if (levelIdx + 1 >= CFG.levels.length) { state = "win"; showMsg("🏆 Você venceu!", "Pontuação final: " + score, "🔁 Jogar de novo"); }
-    else { state = "levelcomplete"; showMsg("✔ Fase concluída!", "Pontuação: " + score, "▶ Próxima fase"); }
+    else { state = "levelcomplete"; showMsg("✔ Fase concluída!", "Pontuação: " + score, worldMapOn ? "🗺️ Ir ao mapa" : "▶ Próxima fase"); }
   }
 
   // ---------- Perigos ----------
@@ -409,6 +420,7 @@
   //  RENDER
   // ============================================================
   function render() {
+    if (state === "map") { drawMap(); return; }
     if (!solids) return;                 // ainda no menu (nenhuma fase montada)
     const th = (CFG.themes || {})[curTheme] || {};
     // fundo
@@ -449,7 +461,7 @@
 
   // ---------- HUD / telas ----------
   const POWER_ICON = { small: "—", big: "⬆", fire: "🔥", fly: "🪽" };
-  function updateHUD() { setTxt("hud-score", score); setTxt("hud-level", (levelIdx + 1) + "/" + CFG.levels.length); setTxt("hud-lives", lives); setTxt("hud-power", POWER_ICON[player.power] || "—"); }
+  function updateHUD() { setTxt("hud-score", score); setTxt("hud-level", (levelIdx + 1) + "/" + CFG.levels.length); setTxt("hud-lives", infinite ? "∞" : lives); setTxt("hud-power", POWER_ICON[player.power] || "—"); }
   function setTxt(id, v) { const el = $(id); if (el) el.textContent = v; }
   function showMsg(title, text, btn) { const m = $("msg"); if (!m) return; setTxt("msg-title", title); setTxt("msg-text", text); setTxt("msg-btn", btn); m.classList.remove("hidden"); }
   function hideMsg() { const m = $("msg"); if (m) m.classList.add("hidden"); }
@@ -459,9 +471,9 @@
   // ============================================================
   function bindKeys() {
     addEventListener("keydown", (e) => {
-      if (e.key === "ArrowLeft" || e.key === "a") keys.left = true;
-      else if (e.key === "ArrowRight" || e.key === "d") keys.right = true;
-      else if (e.key === "ArrowUp" || e.key === " " || e.key === "w") { if (!keys.upHeld) keys.up = true; keys.upHeld = true; }
+      if (e.key === "ArrowLeft" || e.key === "a") { keys.left = true; if (state === "map" && !e.repeat) mapMove(-1); }
+      else if (e.key === "ArrowRight" || e.key === "d") { keys.right = true; if (state === "map" && !e.repeat) mapMove(1); }
+      else if (e.key === "ArrowUp" || e.key === " " || e.key === "w") { if (!keys.upHeld) { keys.up = true; if (state === "map") mapEnter(); } keys.upHeld = true; }
       else if (e.key === "ArrowDown" || e.key === "s") keys.down = true;
       else if (e.key === "f" || e.key === "x") keys.fire = true;
       else if (e.key === "m") toggleMute();
@@ -480,11 +492,76 @@
     setTxt("title", CFG.title || "Meu Jogo");
     const pick = $("playerPick"); if (pick) { pick.innerHTML = ""; players.forEach((p, i) => { const d = document.createElement("div"); d.className = "char" + (i === 0 ? " sel" : ""); d.dataset.i = i; d.innerHTML = "<canvas width=72 height=72></canvas><b>" + (p.name || ("P" + (i + 1))) + "</b>"; pick.appendChild(d); const pc = d.querySelector("canvas").getContext("2d"); const draw = () => { pc.clearRect(0, 0, 72, 72); const im = p._img; if (im && im._ok) pc.drawImage(im, 8, 4, 56, 64); else { pc.fillStyle = "#39c463"; pc.fillRect(16, 10, 40, 52); } }; if (p._img) { p._img._ok ? draw() : p._img.addEventListener("load", draw, { once: true }); } else draw(); d.addEventListener("click", () => { chosen = i; [...pick.children].forEach(c => c.classList.remove("sel")); d.classList.add("sel"); }); }); }
   }
-  function startGame() { levelIdx = 0; score = 0; lives = START_LIVES; player.power = "small"; hideMsg(); $("startScreen").classList.add("hidden"); $("hud").style.display = "flex"; if ($("touch")) $("touch").classList.add("on"); if (ac() && ac().state === "suspended") ac().resume(); buildLevel(0); state = "play"; }
+  function startGame() {
+    levelIdx = 0; score = 0; lives = START_LIVES; player.power = "small"; unlocked = 0; mapSel = 0;
+    const chk = $("infiniteChk"); infinite = (chk && chk.checked) || !!CFG.infiniteLives;
+    hideMsg(); $("startScreen").classList.add("hidden"); if ($("touch")) $("touch").classList.add("on");
+    if (ac() && ac().state === "suspended") ac().resume();
+    if (worldMapOn) openMap(0); else { $("hud").style.display = "flex"; buildLevel(0); state = "play"; }
+  }
+  function openMap(sel) { stopMusic(); hideMsg(); $("startScreen").classList.add("hidden"); $("hud").style.display = "none"; mapSel = Math.max(0, Math.min(sel == null ? mapSel : sel, unlocked)); state = "map"; }
+  function playFromMap(i) { if (i > unlocked) return; levelIdx = i; $("hud").style.display = "flex"; buildLevel(i); state = "play"; }
+  function mapMove(d) { if (state !== "map") return; mapSel = Math.max(0, Math.min(mapSel + d, unlocked)); }
+  function mapEnter() { if (state !== "map") return; if (ac() && ac().state === "suspended") ac().resume(); playFromMap(mapSel); }
   function nextAfterMsg() {
     hideMsg();
-    if (state === "levelcomplete") { levelIdx++; buildLevel(levelIdx); state = "play"; }
+    if (state === "levelcomplete") { if (worldMapOn) openMap(Math.min(levelIdx + 1, MAP_NODES.length - 1)); else { levelIdx++; buildLevel(levelIdx); $("hud").style.display = "flex"; state = "play"; } }
     else if (state === "win" || state === "gameover") { $("startScreen").classList.remove("hidden"); $("hud").style.display = "none"; if ($("touch")) $("touch").classList.remove("on"); state = "start"; }
+  }
+
+  // ---------- Mapa de fases (trilha sinuosa) ----------
+  function buildMapNodes(N) {
+    const nodes = [], perRow = 5, x0 = 92, x1 = 708;
+    const rows = Math.max(1, Math.ceil(N / perRow));
+    for (let i = 0; i < N; i++) {
+      const r = Math.floor(i / perRow), k = i % perRow, cols = Math.min(perRow, N - r * perRow);
+      const kk = (r % 2 === 0) ? k : (cols - 1 - k), t = cols > 1 ? kk / (cols - 1) : 0.5;
+      const y = rows > 1 ? (96 + r * (268 / (rows - 1))) : 220;
+      nodes.push({ x: x0 + (x1 - x0) * t + Math.sin(kk * 1.7 + r * 2.1) * 14, y: y + Math.sin(kk * 1.2 + r * 1.6) * 18 });
+    }
+    return nodes;
+  }
+  function traceTrail(pts, count) {
+    const n = count == null ? pts.length : count; if (n < 1) return;
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < n - 1; i++) { const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2; ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my); }
+    if (n >= 2) ctx.lineTo(pts[n - 1].x, pts[n - 1].y);
+  }
+  function drawMap() {
+    const T = performance.now() / 1000;
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#2f7fc0"); g.addColorStop(1, "#57a9e6"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#e9d29a"; ctx.beginPath(); ctx.ellipse(W / 2, H / 2 + 8, W * 0.46, H * 0.42, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#6fae54"; ctx.beginPath(); ctx.ellipse(W / 2, H / 2 + 8, W * 0.43, H * 0.37, 0, 0, 7); ctx.fill();
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(120,86,30,.5)"; ctx.lineWidth = 13; traceTrail(MAP_NODES); ctx.stroke();
+    ctx.strokeStyle = "#efdca6"; ctx.lineWidth = 9; ctx.stroke();
+    if (unlocked > 0) { ctx.strokeStyle = "#ffcf5a"; ctx.lineWidth = 9; traceTrail(MAP_NODES, Math.min(unlocked, MAP_NODES.length - 1) + 1); ctx.stroke(); }
+    for (let i = 0; i < MAP_NODES.length; i++) {
+      const n = MAP_NODES[i], boss = LEVEL_IS_BOSS[i], open = i <= unlocked, done = i < unlocked, cur = i === unlocked, sel = i === mapSel;
+      ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.ellipse(n.x, n.y + 18, 17, 7, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = done ? "#39c463" : (open ? (boss ? "#b03048" : "#5fa83d") : "#8a8f9a");
+      ctx.beginPath(); ctx.arc(n.x, n.y, 18, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(n.x, n.y, 18, 0, 7); ctx.stroke();
+      if (cur) { const p = 2 + Math.sin(T * 4) * 1.5; ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(n.x, n.y, 22 + p, 0, 7); ctx.stroke(); }
+      ctx.fillStyle = open ? "#fff" : "#e8e8e8"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(open ? String(i + 1) : "🔒", n.x, n.y + 1);
+      if (boss) { ctx.font = "13px sans-serif"; ctx.fillText("👑", n.x, n.y - 26); }
+      if (done) { ctx.fillStyle = "#0a5"; ctx.beginPath(); ctx.arc(n.x + 14, n.y - 14, 7, 0, 7); ctx.fill(); ctx.fillStyle = "#fff"; ctx.font = "bold 10px sans-serif"; ctx.fillText("✓", n.x + 14, n.y - 13); }
+      if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(n.x, n.y, 20, 0, 7); ctx.stroke(); }
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    const sn = MAP_NODES[mapSel];
+    if (sn) { const hop = Math.abs(Math.sin(T * 3)) * 6; sprite(players[chosen]._img, sn.x - 14, sn.y - 42 - hop, 28, 34, { color: "#39c463" }); }
+    ctx.fillStyle = "rgba(0,0,0,.5)"; roundRect(W / 2 - 155, 12, 310, 34, 9); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🗺️ Fase " + (mapSel + 1) + "/" + MAP_NODES.length + (LEVEL_IS_BOSS[mapSel] ? " · 👑 Chefão" : ""), W / 2, 29);
+    ctx.font = "13px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillText("← →  escolher   ·   ↑ / ▲  entrar", W / 2, H - 16);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+  function onMapTap(clientX, clientY) {
+    if (state !== "map") return; const r = canvas.getBoundingClientRect();
+    const cx = (clientX - r.left) * (canvas.width / r.width), cy = (clientY - r.top) * (canvas.height / r.height);
+    for (let i = 0; i < MAP_NODES.length; i++) { const n = MAP_NODES[i]; if (i <= unlocked && Math.hypot(cx - n.x, cy - n.y) < 24) { mapSel = i; mapEnter(); return; } }
   }
 
   // ---------- Loop ----------
@@ -494,11 +571,13 @@
   // ---------- Boot ----------
   function boot() {
     bindKeys();
-    bindTouch("btnLeft", () => keys.left = true, () => keys.left = false);
-    bindTouch("btnRight", () => keys.right = true, () => keys.right = false);
+    bindTouch("btnLeft", () => { keys.left = true; if (state === "map") mapMove(-1); }, () => keys.left = false);
+    bindTouch("btnRight", () => { keys.right = true; if (state === "map") mapMove(1); }, () => keys.right = false);
     bindTouch("btnDown", () => keys.down = true, () => keys.down = false);
-    bindTouch("btnJump", () => { keys.up = true; keys.upHeld = true; }, () => keys.upHeld = false);
+    bindTouch("btnJump", () => { keys.up = true; keys.upHeld = true; if (state === "map") mapEnter(); }, () => keys.upHeld = false);
     bindTouch("btnFire", () => keys.fire = true, () => {});
+    canvas.addEventListener("click", (e) => onMapTap(e.clientX, e.clientY));
+    canvas.addEventListener("touchstart", (e) => { if (state === "map" && e.touches[0]) { e.preventDefault(); onMapTap(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
     const sb = $("startBtn"); if (sb) sb.addEventListener("click", startGame);
     const mb = $("msg-btn"); if (mb) mb.addEventListener("click", nextAfterMsg);
     const mu = $("muteBtn"); if (mu) mu.addEventListener("click", toggleMute);
@@ -509,7 +588,9 @@
       get state() { return state; }, get score() { return score; }, get levelIdx() { return levelIdx; },
       get boss() { return boss; }, get enemies() { return enemies; }, get player() { return player; },
       get lives() { return lives; }, get levelW() { return levelW; }, get levelH() { return levelH; },
-      enterLevel: (i) => { levelIdx = i; buildLevel(i); state = "play"; }, start: () => startGame(),
+      get unlocked() { return unlocked; }, get mapNodes() { return MAP_NODES; }, get worldMapOn() { return worldMapOn; },
+      setUnlocked: (n) => { unlocked = n; }, openMap: (s) => openMap(s),
+      enterLevel: (i) => { levelIdx = i; buildLevel(i); $("hud").style.display = "flex"; state = "play"; }, start: () => startGame(),
       hurtBoss: (n) => bossHurt(n || 1), config: CFG,
     };
   }

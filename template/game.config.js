@@ -38,6 +38,8 @@
 window.GAME_CONFIG = {
   title: "MEU JOGO 🐸",
   lives: 3,
+  worldMap: true,        // mapa de fases em trilha (false = linear, fase após fase)
+  infiniteLives: false,  // vidas infinitas (também há um interruptor no menu)
 
   // Motor (deixe assim ou ajuste; tile = tamanho do bloco em px)
   view: { width: 800, height: 450, tile: 40, gravity: 0.62, jumpSpeed: -12.4, powerJumpSpeed: -14.6, maxSpeed: 4.6 },

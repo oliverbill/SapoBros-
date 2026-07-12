@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Template do Motor</title>
+<style>
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; }
+  body { background:#1b2b3a; color:#fff; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         display:flex; align-items:center; justify-content:center; min-height:100%; overflow:hidden; user-select:none; }
+  #wrap { position:relative; width:100%; max-width:900px; }
+  canvas { display:block; width:100%; height:auto; background:#5c94fc; image-rendering:pixelated; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:16px; background:rgba(10,20,30,.82); border-radius:10px; padding:20px; }
+  .overlay.hidden { display:none; }
+  .overlay h1 { margin:0; font-size:clamp(24px,6vw,44px); text-shadow:3px 3px 0 #000; }
+  .btn { cursor:pointer; border:none; border-radius:10px; padding:14px 26px; font-size:clamp(15px,3.5vw,20px); font-weight:800; color:#3a2000; background:linear-gradient(#ffe15a,#ffb400); box-shadow:0 5px 0 #b57a00; }
+  .btn:active { transform:translateY(4px); box-shadow:0 1px 0 #b57a00; }
+  .char-pick { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+  .char { cursor:pointer; background:rgba(255,255,255,.08); border:3px solid transparent; border-radius:14px; padding:10px 12px; width:120px; }
+  .char.sel { border-color:#ffd23f; background:rgba(255,210,63,.18); }
+  .char b { display:block; font-size:14px; margin-top:4px; }
+  #hud { position:absolute; top:10px; left:0; right:0; display:none; justify-content:space-between; padding:0 16px; font-weight:800; font-size:clamp(13px,3vw,17px); text-shadow:2px 2px 0 #000; pointer-events:none; }
+  #hud .box { background:rgba(0,0,0,.28); padding:5px 12px; border-radius:8px; }
+  #hud .ctrl { pointer-events:auto; cursor:pointer; }
+  #touch { position:absolute; inset:0; display:none; pointer-events:none; }
+  #touch.on { display:block; }
+  .pad { position:absolute; top:50%; transform:translateY(-50%); pointer-events:auto; display:flex; gap:14px; }
+  .pad.left { left:16px; } .pad.right { right:16px; }
+  .tbtn { width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,.22); border:2px solid rgba(255,255,255,.5); color:#fff; font-size:24px; font-weight:900; display:flex; align-items:center; justify-content:center; }
+  .hint { font-size:12px; opacity:.7; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="800" height="450"></canvas>
+
+  <div id="hud">
+    <span class="box">🏆 <span id="hud-score">0</span></span>
+    <span class="box">Fase <span id="hud-level">1</span></span>
+    <span class="box">Poder <span id="hud-power">—</span></span>
+    <span class="box">❤ <span id="hud-lives">3</span></span>
+    <span class="box ctrl" id="muteBtn">🔊</span>
+  </div>
+
+  <div id="startScreen" class="overlay">
+    <h1 id="title">Meu Jogo</h1>
+    <div class="char-pick" id="playerPick"></div>
+    <button class="btn" id="startBtn">▶ Começar</button>
+    <p class="hint">← → mover · ↑ / Espaço pular · F atirar · (ou botões na tela)</p>
+  </div>
+
+  <div id="msg" class="overlay hidden">
+    <h1 id="msg-title">—</h1>
+    <p id="msg-text"></p>
+    <button class="btn" id="msg-btn">▶ Continuar</button>
+  </div>
+
+  <div id="touch">
+    <div class="pad left"><div class="tbtn" id="btnLeft">◀</div><div class="tbtn" id="btnDown">▼</div><div class="tbtn" id="btnRight">▶</div></div>
+    <div class="pad right"><div class="tbtn" id="btnFire">🔥</div><div class="tbtn" id="btnJump">▲</div></div>
+  </div>
+</div>
+
+<!-- 1) Sua configuração (edite este arquivo).  2) O motor (não edite). -->
+<script src="game.config.js"></script>
+<script src="engine.js"></script>
+</body>
+</html>

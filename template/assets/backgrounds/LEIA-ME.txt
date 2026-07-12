@@ -1,0 +1,2 @@
+Ponha aqui as imagens de fundo dos cenarios (opcional, com parallax).
+Referencie em themes{}.bgImage no game.config.js

@@ -1,0 +1,2 @@
+Ponha aqui as vozes (mp3/ogg).
+Referencie em voices{} e use em voiceEvents{}.

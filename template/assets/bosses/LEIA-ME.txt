@@ -1,0 +1,2 @@
+Ponha aqui os PNG dos chefoes.
+Ex.: reptil.png, dragao.png — referencie em bosses{}.image

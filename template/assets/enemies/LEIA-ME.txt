@@ -1,0 +1,2 @@
+Ponha aqui os PNG dos inimigos e power-ups.
+Ex.: caminhante.png, atirador.png, cogumelo.png — referencie em enemies{}/powerups{}.

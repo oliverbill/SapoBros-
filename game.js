@@ -328,6 +328,43 @@ G........BBBB.........BBBB.........BBBB.........BBBB........BBBB.......G
 G.P..?............?............?............?............?..........X..G
 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
+  // ============================================================
+  //  FASES E CHEFÕES  (20 estágios: 3 fases temáticas + 1 chefão por mundo)
+  // ============================================================
+  const STAGES_PER_WORLD = 4;               // 3 fases + 1 arena de chefão
+  const NUM_STAGES = 20;
+  const BOSS_TYPES = ["brutao", "bocao", "assombro", "cavucao", "dragao"];
+  const BOSS_NAMES = {
+    brutao: "Brutão", bocao: "Bocão", assombro: "Assombro",
+    cavucao: "Cavucão", dragao: "Rei Dragão",
+  };
+  function worldOf(i)     { return Math.floor(i / STAGES_PER_WORLD); }
+  function stageIsBoss(i) { return i % STAGES_PER_WORLD === STAGES_PER_WORLD - 1; }
+  function themedIndex(i) { return worldOf(i) * 3 + (i % STAGES_PER_WORLD); }  // só p/ fases normais
+
+  // Arena de chefão (castelo): sala fechada por paredes, chão com poças de
+  // lava nas bases e espinhos nas paredes. 'L' lava · '^' espinho · 'Z' chefão.
+  function buildArena(opts) {
+    const AW = 22, AH = 10, g = AH - 1;
+    const rows = Array.from({ length: AH }, () => Array(AW).fill("."));
+    for (let r = 0; r < AH; r++) { rows[r][0] = "B"; rows[r][AW - 1] = "B"; }  // paredes
+    for (let c = 0; c < AW; c++) rows[g][c] = "G";                              // chão
+    rows[g][1] = "L"; rows[g][2] = "L"; rows[g][AW - 3] = "L"; rows[g][AW - 2] = "L"; // lava
+    for (const r of [5, 6]) { rows[r][1] = "^"; rows[r][AW - 2] = "^"; }        // espinhos na parede
+    if (opts.platforms) { for (const c of [6, 7, 8]) rows[5][c] = "B"; for (const c of [13, 14, 15]) rows[5][c] = "B"; }
+    rows[g - 1][3] = "P";
+    rows[g - 1][opts.bossCol] = "Z";
+    return rows.map(r => r.join("")).join("\n");
+  }
+  const BOSS_ARENAS = [
+    buildArena({ bossCol: 16 }),                    // Brutão
+    buildArena({ bossCol: 10, platforms: true }),   // Bocão
+    buildArena({ bossCol: 17, platforms: true }),   // Assombro
+    buildArena({ bossCol: 14 }),                    // Cavucão
+    buildArena({ bossCol: 17 }),                    // Rei Dragão
+  ];
+
+
 
   // ============================================================
   //  WORLD STATE
@@ -353,6 +390,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   let exitPipe = null;          // cano de saída (no subterrâneo)
   let underground = false;      // cena subterrânea ativa?
   let pipeReturn = null;        // {levelIdx, x, y} para voltar do subterrâneo
+  let boss = null;              // chefão da arena (um por estágio de chefão)
+  let bossShots = [];           // projéteis do chefão {type,x,y,w,h,vx,vy,g,...}
+  let lavas = [];               // poças de lava (mortais) na arena de chefão
+  let spikes = [];              // espinhos na parede (causam dano)
+  let bossStage = false;        // o estágio atual é uma arena de chefão?
   let levelW = 0, levelH = 0;
   let cameraX = 0;
   let particles = [];
@@ -430,14 +472,18 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function clearScene() {
     solids = []; coins = []; enemies = []; particles = []; flag = null;
     powerups = []; fireballs = []; pipes = []; exitPipe = null; flagAnim = null;
+    boss = null; bossShots = []; lavas = []; spikes = []; bossStage = false;
   }
 
   function loadLevel(idx) {
-    const map = LEVELS[idx].split("\n");
+    const isBoss = stageIsBoss(idx);
+    const map = (isBoss ? BOSS_ARENAS[worldOf(idx)] : LEVELS[themedIndex(idx)]).split("\n");
     clearScene();
     underground = false;
+    bossStage = isBoss;
     levelH = map.length * TILE;
     levelW = map[0].length * TILE;
+    let bossSpawn = null;
 
     for (let r = 0; r < map.length; r++) {
       for (let c = 0; c < map[r].length; c++) {
@@ -452,6 +498,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         } else if (ch === "M") { spawnPowerup("mushroom", x, y);
         } else if (ch === "R") { spawnPowerup("fire", x, y);
         } else if (ch === "V") { spawnPowerup("fly", x, y);
+        } else if (ch === "L") {
+          lavas.push({ x, y:y + 10, w:TILE, h:TILE - 10 });      // poça de lava (mortal)
+        } else if (ch === "^") {
+          spikes.push({ x, y, w:TILE, h:TILE });                 // espinho na parede (dano)
+        } else if (ch === "Z") {
+          bossSpawn = { x, y };
         } else if (ch === "F") {
           flag = { x:x+16, y:y - TILE*2, w:8, h:TILE*3 };
         } else if (ch === "P") {
@@ -459,10 +511,16 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         }
       }
     }
-    (POWERUPS_BY_LEVEL[idx] || []).forEach(pu => spawnPowerup(pu.type, pu.col * TILE, pu.row * TILE));
+    if (isBoss) {
+      if (bossSpawn) spawnBoss(BOSS_TYPES[worldOf(idx)], bossSpawn.x);
+      respawnPlayer(false);
+      cameraX = 0;
+      return;   // arenas de chefão não têm power-ups/blocos/canos
+    }
+    (POWERUPS_BY_LEVEL[themedIndex(idx)] || []).forEach(pu => spawnPowerup(pu.type, pu.col * TILE, pu.row * TILE));
     // blocos "?" (soltam item na cabeçada). Proteção: nunca colocar sobre
     // outro sólido (embaixo deve estar vazio, senão a cabeçada é impossível).
-    (QBLOCKS_BY_LEVEL[idx] || []).forEach(q => {
+    (QBLOCKS_BY_LEVEL[themedIndex(idx)] || []).forEach(q => {
       const bx = q.col * TILE, by = q.row * TILE;
       const belowBlocked = solids.some(s =>
         (bx + TILE/2) > s.x && (bx + TILE/2) < s.x + s.w && Math.abs(s.y - (by + TILE)) < 2);
@@ -472,7 +530,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     // canos gigantes (2x2 tiles) que levam ao subterrâneo. Proteção: não
     // colocar se o corpo do cano se sobrepõe a algum bloco existente (viraria
     // parede/entrada bloqueada).
-    (PIPES_BY_LEVEL[idx] || []).forEach(p => {
+    (PIPES_BY_LEVEL[themedIndex(idx)] || []).forEach(p => {
       const px = p.col*TILE, py = p.row*TILE;
       const body = { x:px, y:py, w:TILE*2, h:TILE*2 };
       if (solids.some(s => rectsOverlap(body, s))) return;   // sobreposto -> ignora
@@ -720,15 +778,17 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function completeLevel() {
     musicStop();
     snd("levelclear");
-    unlocked = Math.max(unlocked, Math.min(levelIdx + 1, LEVELS.length - 1));
-    if (levelIdx + 1 >= LEVELS.length) {
+    unlocked = Math.max(unlocked, Math.min(levelIdx + 1, NUM_STAGES - 1));
+    const wasBoss = stageIsBoss(levelIdx);
+    if (levelIdx + 1 >= NUM_STAGES) {
       state = "win";
       saveProgress();   // jogo concluído
-      showMsg("🏆 Você venceu!", `Parabéns! ${CHARACTERS[chosen].name} atravessou todo o bosque. Pontuação final: ${score} 🍎`, "🔁 Jogar de novo");
+      showMsg("🏆 Você venceu!", `Parabéns! ${CHARACTERS[chosen].name} derrotou o Rei Dragão e salvou o reino. Pontuação final: ${score} 🍎`, "🔁 Jogar de novo");
     } else {
       state = "levelend";
       saveProgress();
-      showMsg("✔ Fase concluída!", `Fase ${levelIdx + 2} desbloqueada no mapa! Pontuação: ${score} 🍎`, "🗺️ Ir ao mapa");
+      const t = wasBoss ? "👑 Chefão derrotado!" : "✔ Fase concluída!";
+      showMsg(t, `Fase ${levelIdx + 2} desbloqueada no mapa! Pontuação: ${score} 🍎`, "🗺️ Ir ao mapa");
     }
   }
 
@@ -851,6 +911,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (p.y > levelH + 60) killPlayer();
 
     updateEnemies();
+    if (bossStage) { updateBoss(); updateBossShots(); checkHazards(); }
     updateCoins();
     updatePowerups();
     updateFireballs();
@@ -999,6 +1060,204 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     }
   }
 
+  // ============================================================
+  //  CHEFÕES  (comportamentos inspirados nos clássicos do gênero)
+  //  Arte 100% original desenhada no canvas — sem personagens de terceiros.
+  // ============================================================
+  function spawnBoss(type, tileX) {
+    const floorTop = levelH - TILE;
+    const cfg = {
+      brutao:   { w:62, h:56, hp:3 },
+      bocao:    { w:56, h:66, hp:3 },
+      assombro: { w:60, h:60, hp:3 },
+      cavucao:  { w:56, h:50, hp:3 },
+      dragao:   { w:80, h:82, hp:5 },
+    }[type];
+    boss = {
+      type, w:cfg.w, h:cfg.h, hp:cfg.hp, maxHp:cfg.hp,
+      x: tileX + TILE/2 - cfg.w/2, y: floorTop - cfg.h,
+      vx:0, vy:0, onFloor:false, face:-1,
+      t:0, phase:"idle", pcd:0, hitFlash:0, invT:0,
+      dying:false, dieT:0, frozen:false, shot:false, floorTop,
+      homeY: floorTop - cfg.h,
+    };
+    if (type === "bocao")   { boss.phase = "down"; boss.y = floorTop + 6; }   // começa retraído
+    if (type === "cavucao") { boss.phase = "under"; boss.y = floorTop + 6; }  // começa enterrado
+  }
+
+  // Física de piso para chefões que andam (gravidade + parede + beira/lava)
+  function bossGround(b) {
+    b.vy += GRAVITY; if (b.vy > 14) b.vy = 14;
+    b.x += b.vx;
+    for (const s of solids) if (rectsOverlap(b, s)) { if (b.vx > 0) b.x = s.x - b.w; else b.x = s.x + s.w; b.vx *= -1; b.face *= -1; }
+    b.y += b.vy; b.onFloor = false;
+    for (const s of solids) if (rectsOverlap(b, s)) { if (b.vy > 0) { b.y = s.y - b.h; b.vy = 0; b.onFloor = true; } else { b.y = s.y + s.h; b.vy = 0; } }
+    if (b.onFloor) {
+      const aheadX = b.vx > 0 ? b.x + b.w + 2 : b.x - 2, footY = b.y + b.h + 4;
+      const solid = solids.some(s => aheadX >= s.x && aheadX <= s.x + s.w && footY >= s.y && footY <= s.y + s.h);
+      const lava = lavas.some(L => aheadX >= L.x && aheadX <= L.x + L.w);
+      if (!solid || lava) { b.vx *= -1; b.face *= -1; }
+    }
+  }
+
+  function updateBoss() {
+    const b = boss; if (!b) return;
+    const p = player, pcx = p.x + p.w/2;
+    b.t++; if (b.hitFlash > 0) b.hitFlash--; if (b.invT > 0) b.invT--;
+
+    if (b.dying) {                            // derrotado: sobe e some
+      b.dieT++; b.y -= 1.2;
+      if (b.dieT > 80) { boss = null; completeLevel(); }
+      return;
+    }
+
+    switch (b.type) {
+      // Brutão (Goomba): anda e, de tempos em tempos, dá uma investida
+      case "brutao": {
+        if (b.phase === "idle") { b.phase = "patrol"; b.vx = (b.x + b.w/2 > pcx ? -1 : 1) * 1.4; }
+        if (b.phase === "patrol") {
+          if (!b.vx) b.vx = 1.4;
+          bossGround(b);
+          if (b.t % 200 === 190) { b.phase = "windup"; b.pcd = 26; b.vx = 0; b.face = pcx < b.x + b.w/2 ? -1 : 1; }
+        } else if (b.phase === "windup") {
+          b.vx = 0; bossGround(b); if (--b.pcd <= 0) { b.phase = "charge"; b.pcd = 44; b.vx = b.face * 4.6; }
+        } else if (b.phase === "charge") {
+          bossGround(b);
+          if (--b.pcd <= 0) { b.phase = "patrol"; b.vx = b.face * 1.4; }
+        }
+        break;
+      }
+      // Bocão (planta): sobe do chão, abre a boca e cospe sementes
+      case "bocao": {
+        if (b.phase === "down") { b.y = b.floorTop + 6; if (b.t % 150 === 130) b.phase = "rise"; }
+        else if (b.phase === "rise") { b.y -= 3; if (b.y <= b.homeY) { b.y = b.homeY; b.phase = "up"; b.pcd = 48; } }
+        else if (b.phase === "up") { if (--b.pcd <= 0) { b.phase = "spit"; b.pcd = 38; b.shot = false; } }
+        else if (b.phase === "spit") { if (!b.shot && b.pcd < 20) { b.shot = true; bossSpit(); } if (--b.pcd <= 0) b.phase = "retract"; }
+        else if (b.phase === "retract") { b.y += 3; if (b.y >= b.floorTop + 6) { b.y = b.floorTop + 6; b.phase = "down"; b.t -= b.t % 150; } }
+        break;
+      }
+      // Assombro (Boo): só avança quando o jogador está de costas
+      case "assombro": {
+        const bcx = b.x + b.w/2;
+        b.frozen = ((bcx > pcx) === (p.face === 1));    // jogador olhando p/ ele -> congela
+        if (b.frozen) { b.vx *= 0.7; b.vy *= 0.7; }
+        else {
+          const dx = pcx - bcx, dy = (p.y + p.h/2) - (b.y + b.h/2), d = Math.hypot(dx, dy) || 1;
+          b.vx = dx/d * 1.5; b.vy = dy/d * 1.0;
+        }
+        b.x += b.vx; b.y += b.vy + Math.sin(b.t * 0.08) * 0.4;
+        b.x = Math.max(TILE, Math.min(b.x, levelW - TILE - b.w));
+        b.y = Math.max(TILE, Math.min(b.y, b.floorTop - b.h + 10));
+        break;
+      }
+      // Cavucão (toupeira): cava até o jogador e salta para fora
+      case "cavucao": {
+        if (b.phase === "under") {
+          b.y = b.floorTop + 6;
+          b.x += (pcx > b.x + b.w/2 ? 1 : -1) * 1.7;
+          b.x = Math.max(TILE, Math.min(b.x, levelW - TILE - b.w));
+          if (b.t % 150 === 130) { b.phase = "pop"; b.vy = -12; }
+        } else if (b.phase === "pop") {
+          b.vy += GRAVITY; b.y += b.vy;
+          if (b.y >= b.floorTop - b.h) { b.y = b.floorTop - b.h; b.vy = 0; b.phase = "out"; b.pcd = 44; }
+        } else if (b.phase === "out") { if (--b.pcd <= 0) { b.phase = "under"; b.t -= b.t % 150; } }
+        break;
+      }
+      // Rei Dragão (chefe final): pula, cospe fogo, arremessa martelos e avança
+      case "dragao": {
+        bossGround(b);
+        if (b.onFloor) b.vx = (pcx < b.x + b.w/2 ? -0.5 : 0.5);
+        if (b.onFloor && b.t % 150 === 140) b.vy = -11;
+        if (b.t % 110 === 60) bossBreatheFire();
+        if (b.t % 200 === 120) bossThrowHammer();
+        break;
+      }
+    }
+    bossPlayerCollide();
+  }
+
+  function bossStompable(b) {
+    switch (b.type) {
+      case "brutao":   return true;
+      case "bocao":    return b.phase === "up" || b.phase === "rise";
+      case "assombro": return b.frozen;
+      case "cavucao":  return b.phase === "pop" || b.phase === "out";
+      case "dragao":   return true;
+    }
+    return false;
+  }
+  function bossFireVulnerable(b) {
+    switch (b.type) {
+      case "assombro": return b.frozen;
+      case "bocao":    return b.phase !== "down" && b.phase !== "retract";
+      case "cavucao":  return b.phase === "pop" || b.phase === "out";
+      default:         return true;
+    }
+  }
+  function bossHurt(n) {
+    const b = boss;
+    if (!b || b.invT > 0 || b.dying) return false;
+    b.hp -= n; b.hitFlash = 12; b.invT = 45; snd("bump");
+    spawnSpark(b.x + b.w/2, b.y + b.h/2);
+    if (b.hp <= 0) { b.dying = true; b.dieT = 0; snd("stomp"); score += 2000; updateHUD(); spawnPop(b.x + b.w/2, b.y + b.h/2); }
+    return true;
+  }
+  function bossPlayerCollide() {
+    const b = boss, p = player;
+    if (!b || b.dying || p.dead || !rectsOverlap(p, b)) return;
+    const stomping = p.vy > 0 && (p.y + p.h) - b.y < 26;
+    if (stomping && bossStompable(b)) { p.vy = JUMP_VY * 0.72; bossHurt(1); }
+    else damagePlayer();
+  }
+
+  // Dano ao jogador (perde poder ou morre) — usado por espinhos, lava e chefões
+  function damagePlayer() {
+    const p = player;
+    if (invincible || p.invuln > 0 || p.dead) return;
+    if (chosen === 1) voice("minja_trouble");
+    if (p.power !== "small") {
+      setPower("small"); p.invuln = 100; p.vy = -6;
+      spawnSpark(p.x + p.w/2, p.y + p.h/2); updateHUD(); snd("powerdown");
+    } else killPlayer();
+  }
+
+  // Perigos da arena (só nos estágios de chefão)
+  function checkHazards() {
+    const p = player; if (p.dead) return;
+    for (const L of lavas) if (rectsOverlap(p, L)) { killPlayer(); return; }
+    for (const s of spikes) if (rectsOverlap(p, s)) { damagePlayer(); return; }
+  }
+
+  // Projéteis dos chefões
+  function bossSpit() {
+    const b = boss, ox = b.x + b.w/2, oy = b.y + 10, dir = player.x + player.w/2 > ox ? 1 : -1;
+    for (const a of [-1, 0, 1])
+      bossShots.push({ type:"seed", x:ox-8, y:oy-8, w:16, h:16, vx:dir*2.2 + a*0.9, vy:-4 - Math.abs(a)*0.6, g:0.25, t:0 });
+    snd("shoot");
+  }
+  function bossBreatheFire() {
+    const b = boss, dir = player.x + player.w/2 < b.x + b.w/2 ? -1 : 1, oy = b.y + b.h*0.42;
+    for (let i = 0; i < 3; i++)
+      bossShots.push({ type:"fire", x:b.x + b.w/2, y:oy, w:22, h:15, vx:dir*(3 + i*0.6), vy:(i-1)*0.35, g:0, t:0, life:120 });
+    snd("shoot");
+  }
+  function bossThrowHammer() {
+    const b = boss, dir = player.x + player.w/2 < b.x + b.w/2 ? -1 : 1;
+    bossShots.push({ type:"hammer", x:b.x + b.w/2, y:b.y + 4, w:16, h:16, vx:dir*2.4, vy:-6, g:0.3, t:0, spin:0 });
+    snd("kick");
+  }
+  function updateBossShots() {
+    for (const s of bossShots) {
+      s.t++; s.vy += (s.g || 0); s.x += s.vx; s.y += s.vy;
+      if (s.type === "hammer") s.spin = (s.spin || 0) + 0.4;
+      if (s.type !== "fire" && s.y + s.h >= levelH - TILE) s.dead = true;   // toca o chão
+      if (s.x < -30 || s.x > levelW + 30 || s.y > levelH + 40) s.dead = true;
+      if (s.life && s.t > s.life) s.dead = true;
+      if (!s.dead && !player.dead && rectsOverlap(player, s)) { s.dead = true; damagePlayer(); }
+    }
+    bossShots = bossShots.filter(s => !s.dead);
+  }
+
   function updateCoins() {
     const p = player;
     for (const c of coins) {
@@ -1122,6 +1381,10 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       }
       if (f.x < 0 || f.x > levelW || f.y > levelH + 40) f.dead = true;
 
+      // acerta o chefão (quando vulnerável ao fogo)
+      if (!f.dead && boss && !boss.dying && bossFireVulnerable(boss) && rectsOverlap(f, boss)) {
+        f.dead = true; bossHurt(1);
+      }
       // acerta inimigos
       if (!f.dead) {
         for (const e of enemies) {
@@ -1174,12 +1437,18 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     praia:   { top:"#ecd79a", top2:"#dcc47a", dirt:"#cdb06a" },
     castelo: { top:"#5fa83d", top2:"#4d8a30", dirt:"#9a6a3a" },
     ceu:     { top:"#8fd0a0", top2:"#e6eef5", dirt:"#b8c8d8" },
+    casteloBoss: { top:"#6b6f7a", top2:"#565a63", dirt:"#3d414a" },   // pedra da arena
   };
-  function curTheme() { return underground ? "cave" : (THEME_LIST[Math.floor(levelIdx / 3)] || "bosque"); }
+  function curTheme() {
+    if (underground) return "cave";
+    if (stageIsBoss(levelIdx)) return "casteloBoss";
+    return THEME_LIST[worldOf(levelIdx)] || "bosque";
+  }
 
   function drawBackground() {
     const th = curTheme();
     if (th === "cave") return drawCaveBackground();
+    if (th === "casteloBoss") return drawBossCastleBG();
     if (th === "selva") return drawSelvaBG();
     if (th === "praia") return drawPraiaBG();
     if (th === "castelo") return drawCasteloBG();
@@ -1338,6 +1607,13 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       } else if (s.type === "cavebrick") {
         ctx.fillStyle = "#3d3450"; ctx.fillRect(sx, s.y, s.w, s.h);
         ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.strokeRect(sx + .5, s.y + .5, s.w - 1, s.h - 1);
+      } else if (bossStage) {
+        // tijolo de pedra do castelo (arena de chefão)
+        ctx.fillStyle = "#5a5e68"; ctx.fillRect(sx, s.y, s.w, s.h);
+        ctx.fillStyle = "#6d717c"; ctx.fillRect(sx, s.y, s.w, 5);
+        ctx.fillStyle = "#3d414a"; ctx.fillRect(sx, s.y + s.h - 5, s.w, 5);
+        ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.strokeRect(sx + .5, s.y + .5, s.w - 1, s.h - 1);
+        ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(sx + s.w/2 - 1, s.y + 5, 2, s.h - 10);
       } else {
         ctx.fillStyle = "#c96f2e"; ctx.fillRect(sx, s.y, s.w, s.h);
         ctx.fillStyle = "#a9551d"; ctx.fillRect(sx, s.y, s.w, 4); ctx.fillRect(sx, s.y + s.h - 4, s.w, 4);
@@ -1493,6 +1769,211 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     ctx.closePath(); ctx.fill();
   }
 
+  // ---------- ARENA DE CHEFÃO (castelo, lava, espinhos) ----------
+  function drawBossCastleBG() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#241a22"); g.addColorStop(1, "#3a2630");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // blocos de pedra ao fundo
+    ctx.fillStyle = "rgba(255,255,255,.04)";
+    for (let y = 24, row = 0; y < H - 70; y += 44, row++)
+      for (let x = (row % 2 ? 22 : -10); x < W; x += 64) ctx.fillRect(x, y, 60, 40);
+    // brilho da lava embaixo
+    const lg = ctx.createLinearGradient(0, H - 80, 0, H);
+    lg.addColorStop(0, "rgba(255,90,20,0)"); lg.addColorStop(1, "rgba(255,120,30,.35)");
+    ctx.fillStyle = lg; ctx.fillRect(0, H - 80, W, 80);
+    // tochas
+    const t = performance.now() / 120;
+    for (const tx of [120, 400, 680]) {
+      ctx.fillStyle = "#4a2f1a"; ctx.fillRect(tx - 3, 96, 6, 42);
+      const fl = 5 + Math.sin(t + tx) * 3;
+      ctx.fillStyle = "#ffce54"; ctx.beginPath(); ctx.ellipse(tx, 92, 7, 11 + fl, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#ff7a1a"; ctx.beginPath(); ctx.ellipse(tx, 96, 4, 6 + fl * 0.5, 0, 0, 7); ctx.fill();
+    }
+  }
+  function drawLava() {
+    const t = performance.now() / 300;
+    for (const L of lavas) {
+      const x = L.x - cameraX; if (x + L.w < 0 || x > W) continue;
+      ctx.fillStyle = "#e0451a"; ctx.fillRect(x, L.y, L.w, L.h);
+      ctx.fillStyle = "rgba(255,220,120,.55)"; ctx.fillRect(x, L.y, L.w, 3);
+      ctx.fillStyle = "#ff8a2a";
+      for (let i = 0; i < 3; i++) { const bx = x + 6 + i * 12, by = L.y + 8 + Math.sin(t + i + L.x) * 3; ctx.beginPath(); ctx.arc(bx, by, 2.6, 0, 7); ctx.fill(); }
+    }
+  }
+  function drawSpikes() {
+    for (const s of spikes) {
+      const x = s.x - cameraX; if (x + s.w < 0 || x > W) continue;
+      const left = s.x < levelW / 2;
+      ctx.fillStyle = "#8a8f9a"; if (left) ctx.fillRect(x - 2, s.y, 4, s.h); else ctx.fillRect(x + s.w - 2, s.y, 4, s.h);
+      ctx.fillStyle = "#c9ccd4";
+      for (let i = 0; i < 3; i++) {
+        const yy = s.y + 5 + i * 11; ctx.beginPath();
+        if (left) { ctx.moveTo(x, yy); ctx.lineTo(x + s.w * 0.75, yy + 5); ctx.lineTo(x, yy + 11); }
+        else      { ctx.moveTo(x + s.w, yy); ctx.lineTo(x + s.w * 0.25, yy + 5); ctx.lineTo(x + s.w, yy + 11); }
+        ctx.closePath(); ctx.fill();
+      }
+    }
+  }
+  function drawBossShots() {
+    for (const s of bossShots) {
+      const x = s.x - cameraX, cx = x + s.w/2, cy = s.y + s.h/2;
+      if (x + s.w < 0 || x > W) continue;
+      if (s.type === "seed") {
+        ctx.fillStyle = "#6bd06b"; ctx.beginPath(); ctx.ellipse(cx, cy, s.w/2, s.h/2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#2f7a3c"; ctx.beginPath(); ctx.arc(cx - 2, cy - 2, 2, 0, 7); ctx.fill();
+      } else if (s.type === "fire") {
+        ctx.fillStyle = "#ffce54"; ctx.beginPath(); ctx.ellipse(cx, cy, s.w/2, s.h/2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#ff6a1a"; ctx.beginPath(); ctx.ellipse(cx, cy, s.w/3, s.h/3, 0, 0, 7); ctx.fill();
+      } else { // hammer
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(s.spin || 0);
+        ctx.fillStyle = "#8a6a3e"; ctx.fillRect(-2, -2, 4, 10);
+        ctx.fillStyle = "#b9bcc4"; ctx.fillRect(-7, -8, 14, 7);
+        ctx.restore();
+      }
+    }
+  }
+
+  // Cada chefão: arte original desenhada no canvas + barra de vida
+  function drawBoss() {
+    const b = boss; if (!b) return;
+    const x = b.x - cameraX, y = b.y;
+    ctx.save();
+    if (b.dying) ctx.globalAlpha = Math.max(0, 1 - b.dieT / 80);
+    if (b.type === "brutao")   drawBrutao(x, y, b);
+    else if (b.type === "bocao")    drawBocao(x, y, b);
+    else if (b.type === "assombro") drawAssombro(x, y, b);
+    else if (b.type === "cavucao")  drawCavucao(x, y, b);
+    else if (b.type === "dragao")   drawDragao(x, y, b);
+    if (b.hitFlash > 0 && Math.floor(b.hitFlash / 2) % 2 === 0) {
+      ctx.globalAlpha = 0.55; ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.ellipse(x + b.w/2, y + b.h/2, b.w/2, b.h/2, 0, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    drawBossHealth();
+  }
+  function drawBrutao(x, y, b) {
+    const cx = x + b.w/2, by = y + b.h;
+    ctx.fillStyle = "#3d5a2a";
+    ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.36, b.w*0.5, b.h*0.42, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#2f4720";
+    ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.6, b.w*0.4, b.h*0.24, 0, Math.PI, 0); ctx.fill();
+    // pés
+    ctx.fillStyle = "#26381a"; const fp = Math.sin(performance.now()/90) * 2;
+    ctx.fillRect(cx - 20, by - 8 + fp, 12, 8); ctx.fillRect(cx + 8, by - 8 - fp, 12, 8);
+    // sobrancelhas bravas
+    const dir = b.face;
+    ctx.fillStyle = "#1c2a12";
+    ctx.beginPath(); ctx.moveTo(cx - 18, by - b.h*0.55); ctx.lineTo(cx - 2, by - b.h*0.46); ctx.lineTo(cx - 18, by - b.h*0.44); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + 18, by - b.h*0.55); ctx.lineTo(cx + 2, by - b.h*0.46); ctx.lineTo(cx + 18, by - b.h*0.44); ctx.fill();
+    // olhos
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - 9, by - b.h*0.42, 6, 0, 7); ctx.arc(cx + 9, by - b.h*0.42, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 9 + dir*2, by - b.h*0.42, 3, 0, 7); ctx.arc(cx + 9 + dir*2, by - b.h*0.42, 3, 0, 7); ctx.fill();
+    // presas
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.moveTo(cx - 8, by - b.h*0.26); ctx.lineTo(cx - 4, by - b.h*0.16); ctx.lineTo(cx - 12, by - b.h*0.2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx + 8, by - b.h*0.26); ctx.lineTo(cx + 4, by - b.h*0.16); ctx.lineTo(cx + 12, by - b.h*0.2); ctx.fill();
+  }
+  function drawBocao(x, y, b) {
+    const cx = x + b.w/2, by = y + b.h;
+    // caule
+    ctx.fillStyle = "#2f9a3c"; ctx.fillRect(cx - 6, by - b.h*0.5, 12, b.h*0.5);
+    // folhas
+    ctx.fillStyle = "#3fbf4c";
+    ctx.beginPath(); ctx.ellipse(cx - 12, by - b.h*0.4, 12, 6, 0.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 12, by - b.h*0.4, 12, 6, -0.5, 0, 7); ctx.fill();
+    const open = b.phase === "spit";
+    const headY = by - b.h*0.66;
+    // cabeça (bulbo carnívoro roxo com pintas)
+    ctx.fillStyle = "#a23bb0";
+    ctx.beginPath(); ctx.ellipse(cx, headY, b.w*0.46, b.h*0.3, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#f2f2f2";
+    for (const [dx, dy] of [[-10,-6],[8,-8],[-4,4],[12,2]]) { ctx.beginPath(); ctx.arc(cx+dx, headY+dy, 3, 0, 7); ctx.fill(); }
+    // boca
+    ctx.fillStyle = "#3a0f2a";
+    ctx.beginPath(); ctx.ellipse(cx, headY + (open ? 4 : 8), b.w*0.32, open ? b.h*0.2 : 4, 0, 0, 7); ctx.fill();
+    if (open) { // dentes
+      ctx.fillStyle = "#fff";
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(cx + i*8 - 3, headY - 2); ctx.lineTo(cx + i*8, headY + 4); ctx.lineTo(cx + i*8 + 3, headY - 2); ctx.fill(); }
+    }
+  }
+  function drawAssombro(x, y, b) {
+    const cx = x + b.w/2, cy = y + b.h/2;
+    ctx.fillStyle = "rgba(230,240,255,.92)";
+    ctx.beginPath(); ctx.arc(cx, cy - 4, b.w*0.44, Math.PI, 0); // topo redondo
+    ctx.quadraticCurveTo(cx + b.w*0.44, cy + b.h*0.35, cx + b.w*0.2, cy + b.h*0.3);
+    ctx.quadraticCurveTo(cx, cy + b.h*0.44, cx - b.w*0.2, cy + b.h*0.3);
+    ctx.quadraticCurveTo(cx - b.w*0.44, cy + b.h*0.35, cx - b.w*0.44, cy - 4);
+    ctx.fill();
+    if (b.frozen) {  // tímido: cobre o rosto
+      ctx.fillStyle = "#7aa0c8";
+      ctx.beginPath(); ctx.arc(cx - 10, cy, 3, 0, 7); ctx.arc(cx + 10, cy, 3, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#5a7ba0"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy + 8, 6, Math.PI, 0); ctx.stroke();   // boca envergonhada
+    } else {         // bravo: persegue
+      ctx.fillStyle = "#2a3550";
+      ctx.beginPath(); ctx.arc(cx - 10, cy - 2, 4, 0, 7); ctx.arc(cx + 10, cy - 2, 4, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx - 16, cy - 10); ctx.lineTo(cx - 5, cy - 4); ctx.lineTo(cx - 16, cy - 4); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx + 16, cy - 10); ctx.lineTo(cx + 5, cy - 4); ctx.lineTo(cx + 16, cy - 4); ctx.fill();
+      ctx.fillStyle = "#c0392b"; ctx.beginPath(); ctx.ellipse(cx, cy + 10, 9, 6, 0, 0, 7); ctx.fill();  // boca aberta
+    }
+  }
+  function drawCavucao(x, y, b) {
+    const cx = x + b.w/2, by = y + b.h, under = b.phase === "under";
+    if (under) {  // montinho de terra na superfície
+      ctx.fillStyle = "#8a5a2b";
+      ctx.beginPath(); ctx.ellipse(cx, b.floorTop, b.w*0.5, 10, 0, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = "#6b4420";
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(cx + i*10, b.floorTop - 3, 3, 0, 7); ctx.fill(); }
+      return;
+    }
+    ctx.fillStyle = "#7a5230";
+    ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.4, b.w*0.46, b.h*0.42, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#e9c9a0"; ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.28, b.w*0.28, b.h*0.24, 0, 0, 7); ctx.fill();
+    // focinho/garras
+    ctx.fillStyle = "#ffb0c0"; ctx.beginPath(); ctx.arc(cx, by - b.h*0.5, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#d9d9d9";
+    for (const sgn of [-1, 1]) for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx + sgn*(b.w*0.4), by - 12 + i*5); ctx.lineTo(cx + sgn*(b.w*0.55), by - 14 + i*5); ctx.lineTo(cx + sgn*(b.w*0.4), by - 8 + i*5); ctx.fill(); }
+    // olhos apertados
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - 12, by - b.h*0.58); ctx.lineTo(cx - 4, by - b.h*0.56);
+    ctx.moveTo(cx + 12, by - b.h*0.58); ctx.lineTo(cx + 4, by - b.h*0.56); ctx.stroke();
+  }
+  function drawDragao(x, y, b) {
+    const cx = x + b.w/2, by = y + b.h, dir = b.face;
+    // casco espinhoso
+    ctx.fillStyle = "#3a7d2e";
+    ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.34, b.w*0.5, b.h*0.44, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#e9d29a"; ctx.beginPath(); ctx.ellipse(cx, by - b.h*0.24, b.w*0.3, b.h*0.3, 0, 0, 7); ctx.fill();  // barriga
+    ctx.fillStyle = "#c9ccd4";  // espinhos nas costas
+    for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(cx + i*14 - 5, by - b.h*0.62); ctx.lineTo(cx + i*14, by - b.h*0.82); ctx.lineTo(cx + i*14 + 5, by - b.h*0.62); ctx.fill(); }
+    // cabeça
+    ctx.fillStyle = "#3a7d2e"; ctx.beginPath(); ctx.arc(cx + dir*b.w*0.16, by - b.h*0.66, b.w*0.24, 0, 7); ctx.fill();
+    // chifres
+    ctx.fillStyle = "#f2eecb";
+    for (const sgn of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + dir*b.w*0.16 + sgn*8, by - b.h*0.82); ctx.lineTo(cx + dir*b.w*0.16 + sgn*12, by - b.h*0.98); ctx.lineTo(cx + dir*b.w*0.16 + sgn*3, by - b.h*0.84); ctx.fill(); }
+    // coroa
+    ctx.fillStyle = "#ffd23f";
+    const kx = cx + dir*b.w*0.16;
+    ctx.beginPath(); ctx.moveTo(kx - 12, by - b.h*0.9); ctx.lineTo(kx - 12, by - b.h*1.02); ctx.lineTo(kx - 6, by - b.h*0.95); ctx.lineTo(kx, by - b.h*1.05); ctx.lineTo(kx + 6, by - b.h*0.95); ctx.lineTo(kx + 12, by - b.h*1.02); ctx.lineTo(kx + 12, by - b.h*0.9); ctx.fill();
+    // olho
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(kx + dir*6, by - b.h*0.68, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(kx + dir*7, by - b.h*0.68, 2.5, 0, 7); ctx.fill();
+  }
+  function drawBossHealth() {
+    const b = boss; if (!b) return;
+    const bw = 230, x = (W - bw) / 2, y = 54;
+    ctx.fillStyle = "rgba(0,0,0,.55)"; roundRect(x - 10, y - 6, bw + 20, 34, 8); ctx.fill();
+    ctx.fillStyle = "#ff6b6b"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("👑 " + BOSS_NAMES[b.type], x, y + 2);
+    const pipW = bw / b.maxHp;
+    for (let i = 0; i < b.maxHp; i++) {
+      ctx.fillStyle = i < b.hp ? "#ff3b3b" : "rgba(255,255,255,.18)";
+      roundRect(x + i * pipW + 1, y + 14, pipW - 3, 7, 3); ctx.fill();
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
   function drawEnemies() {
     for (const e of enemies) {
       const ex = e.x - cameraX;
@@ -1633,10 +2114,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (state === "map") { drawMap(); return; }
     drawBackground();
     drawSolids();
+    if (bossStage) { drawLava(); drawSpikes(); }
     drawCoins();
     drawPowerups();
     drawFlag();
     drawEnemies();
+    if (bossStage) { drawBoss(); drawBossShots(); }
     drawFireballs();
     drawParticles();
     if (state === "play" || state === "dead" || state === "paused") {
@@ -1676,11 +2159,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   // ---------- MAPA DE FASES (overworld) ----------
   // 15 nós em serpentina (3 fileiras de 5), agrupados em 5 mundos (temas)
   const MAP_NODES = (() => {
-    const nodes = [], perRow = 5, ys = [120, 235, 350], x0 = 78, x1 = 722;
-    for (let r = 0; r < 3; r++) for (let k = 0; k < perRow; k++) {
+    const nodes = [], perRow = 5, ys = [104, 196, 288, 380], x0 = 78, x1 = 722;
+    for (let r = 0; r < 4; r++) for (let k = 0; k < perRow; k++) {
       const idx = r * perRow + k;
       const kk = (r % 2 === 0) ? k : (perRow - 1 - k);
-      nodes.push({ x: x0 + (x1 - x0) * (kk / (perRow - 1)), y: ys[r], world: Math.floor(idx / 3) });
+      nodes.push({ x: x0 + (x1 - x0) * (kk / (perRow - 1)), y: ys[r], world: worldOf(idx), boss: stageIsBoss(idx) });
     }
     return nodes;
   })();
@@ -1850,8 +2333,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     for (let i = 1; i < MAP_NODES.length; i++) ctx.lineTo(MAP_NODES[i].x, MAP_NODES[i].y);
     ctx.stroke(); ctx.setLineDash([]);
 
-    // --- decorações ---
+    // --- decorações --- (pula as que ficariam sobre um nó)
     for (const d of MAP_DECOR) {
+      if (MAP_NODES.some(n => Math.hypot(n.x - d.x, n.y - d.y) < 44)) continue;
       if (d.t === "tree")   mapTree(d.x, d.y, d.s, false);
       else if (d.t === "tree2") mapTree(d.x, d.y, d.s, true);
       else if (d.t === "bush")  mapBush(d.x, d.y, d.s);
@@ -1868,8 +2352,8 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       // sombra
       ctx.fillStyle = "rgba(0,0,0,.22)";
       ctx.beginPath(); ctx.ellipse(n.x, n.y + R - 2, R * 0.9, R * 0.42, 0, 0, 7); ctx.fill();
-      // disco
-      ctx.fillStyle = done ? "#39c463" : (open ? WORLD_COLOR[n.world] : "#8a8f9a");
+      // disco (nós de chefão em tom carmim)
+      ctx.fillStyle = done ? "#39c463" : (open ? (n.boss ? "#b03048" : WORLD_COLOR[n.world]) : "#8a8f9a");
       ctx.beginPath(); ctx.arc(n.x, n.y, R, 0, 7); ctx.fill();
       // brilho superior
       ctx.fillStyle = "rgba(255,255,255,.28)";
@@ -1887,6 +2371,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       ctx.fillStyle = open ? "#fff" : "#e8e8e8";
       ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(open ? String(i + 1) : "🔒", n.x, n.y + 1);
+      if (n.boss) { ctx.font = "14px sans-serif"; ctx.fillText("👑", n.x, n.y - R - 8); }  // marca de chefão
       if (done) {
         ctx.fillStyle = "#0a5"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(n.x + 15, n.y - 15, 8, 0, 7); ctx.fill(); ctx.stroke();
@@ -1908,7 +2393,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     // --- título + instrução ---
     ctx.fillStyle = "rgba(0,0,0,.5)"; roundRect(W / 2 - 176, 12, 352, 38, 10); ctx.fill();
     ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("🗺️ Fase " + (mapSel + 1) + "/15 · " + WORLD_NAME[MAP_NODES[mapSel].world], W / 2, 31);
+    ctx.fillText("🗺️ Fase " + (mapSel + 1) + "/20" + (MAP_NODES[mapSel].boss ? " · 👑 Chefão" : " · " + WORLD_NAME[MAP_NODES[mapSel].world]), W / 2, 31);
     ctx.fillStyle = "rgba(0,0,0,.4)"; roundRect(W / 2 - 150, H - 34, 300, 26, 9); ctx.fill();
     ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.95)";
     ctx.fillText("← →  escolher fase   ·   ↑ / ▲  entrar", W / 2, H - 20);
@@ -2099,6 +2584,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       solids: () => solids,
       pipes: () => pipes,
       flag: () => flag,
+      boss: () => boss,
+      bossShots: () => bossShots,
+      lavas: () => lavas,
+      spikes: () => spikes,
+      hurtBoss: (n) => bossHurt(n || 1),
+      get bossStage() { return bossStage; },
       get sliding() { return !!flagAnim; },
       get state() { return state; },
       get levelH() { return levelH; },

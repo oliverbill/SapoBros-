@@ -445,7 +445,8 @@ try {
     await page.click("#startBtn"); await sleep(120);
     const bad = await page.evaluate(async () => {
       const T = 40, problems = [];
-      for (let lvl = 0; lvl < 15; lvl++) {
+      for (let lvl = 0; lvl < 20; lvl++) {
+        if (lvl % 4 === 3) continue;              // arenas de chefão não têm canos/blocos ?
         window.__DINO.enterLevel(lvl);
         await new Promise(r => setTimeout(r, 25));
         const solids = window.__DINO.solids();
@@ -468,22 +469,78 @@ try {
     await ctx.close();
   }
 
-  // ---------- 18. 15 fases carregáveis, cada uma com bandeira ----------
+  // ---------- 18. 20 estágios carregáveis (15 fases c/ bandeira + 5 chefões) ----------
   {
     const { ctx, page } = await newGame();
     await page.click("#startBtn"); await sleep(120);
     const r = await page.evaluate(async () => {
-      let ok = 0, withFlag = 0;
-      for (let i = 0; i < 15; i++) {
+      let ok = 0, themedFlag = 0, bossArenas = 0;
+      for (let i = 0; i < 20; i++) {
         window.__DINO.enterLevel(i);
         await new Promise(r => setTimeout(r, 20));
         if (window.__DINO.state === "play") ok++;
-        if (window.__DINO.flag()) withFlag++;
+        if (i % 4 === 3) { if (window.__DINO.bossStage && window.__DINO.boss()) bossArenas++; }
+        else if (window.__DINO.flag()) themedFlag++;
       }
-      return { ok, withFlag };
+      return { ok, themedFlag, bossArenas };
     });
-    check("existem 15 fases carregáveis", r.ok === 15, JSON.stringify(r));
-    check("todas as 15 fases têm bandeira", r.withFlag === 15, JSON.stringify(r));
+    check("existem 20 estágios carregáveis", r.ok === 20, JSON.stringify(r));
+    check("as 15 fases normais têm bandeira", r.themedFlag === 15, JSON.stringify(r));
+    check("as 5 arenas de chefão têm um chefão", r.bossArenas === 5, JSON.stringify(r));
+    await ctx.close();
+  }
+
+  // ---------- 19. Chefões: comportamento, dano, lava/espinhos, derrota ----------
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#startBtn"); await sleep(120);
+    // 19a. cada arena de chefão tem lava e espinhos e um chefão com vida
+    const arenas = await page.evaluate(async () => {
+      const out = [];
+      for (const i of [3, 7, 11, 15, 19]) {
+        window.__DINO.enterLevel(i);
+        await new Promise(r => setTimeout(r, 25));
+        const b = window.__DINO.boss();
+        out.push({ i, type: b && b.type, hp: b && b.hp, lava: window.__DINO.lavas().length, spikes: window.__DINO.spikes().length });
+      }
+      return out;
+    });
+    check("as 5 arenas têm lava e espinhos", arenas.every(a => a.lava > 0 && a.spikes > 0), JSON.stringify(arenas));
+    check("os 5 chefões são de tipos distintos", new Set(arenas.map(a => a.type)).size === 5, JSON.stringify(arenas.map(a => a.type)));
+
+    // 19b. dano reduz a vida (um golpe de cada vez por causa da invulnerabilidade)
+    const dmg = await page.evaluate(async () => {
+      window.__DINO.enterLevel(3);                // Brutão (fresco: sem invulnerabilidade)
+      await new Promise(r => setTimeout(r, 30));
+      const hp0 = window.__DINO.boss().hp;
+      window.__DINO.hurtBoss(1);
+      await new Promise(r => setTimeout(r, 20));
+      const hp1 = window.__DINO.boss() ? window.__DINO.boss().hp : 0;
+      return { hp0, hp1 };
+    });
+    check("dano reduz a vida do chefão", dmg.hp1 === dmg.hp0 - 1, JSON.stringify(dmg));
+
+    // 19c. zerar a vida derrota o chefão e conclui o estágio (desbloqueia a próxima)
+    const defeat = await page.evaluate(async () => {
+      window.__DINO.enterLevel(3);                // fresco -> um golpe letal
+      await new Promise(r => setTimeout(r, 30));
+      window.__DINO.hurtBoss(9);                  // zera toda a vida de uma vez
+      await new Promise(r => setTimeout(r, 1800)); // espera a animação de derrota
+      return { state: window.__DINO.state, unlocked: window.__DINO.unlocked, boss: !!window.__DINO.boss() };
+    });
+    check("derrotar o chefão conclui o estágio", (defeat.state === "levelend" || defeat.state === "win") && defeat.unlocked >= 4, JSON.stringify(defeat));
+
+    // 19c. lava mata; espinho tira o poder
+    const hazard = await page.evaluate(async () => {
+      window.__DINO.enterLevel(3);
+      await new Promise(r => setTimeout(r, 30));
+      const pl = window.__DINO.player;
+      const lava = window.__DINO.lavas()[0];
+      pl.x = lava.x + 4; pl.y = lava.y - pl.h + 20; pl.vy = 4;
+      await new Promise(r => setTimeout(r, 120));
+      return { dead: pl.dead || window.__DINO.state === "dead" };
+    });
+    check("cair na lava mata o jogador", hazard.dead === true, JSON.stringify(hazard));
     await ctx.close();
   }
 

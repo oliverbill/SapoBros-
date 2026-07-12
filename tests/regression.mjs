@@ -387,6 +387,25 @@ try {
     });
     check("entrar no cano abre o subterrâneo", inCave.underground === true && inCave.state === "play", JSON.stringify(inCave));
     check("subterrâneo tem morcegos voando", inCave.bats > 0, JSON.stringify(inCave));
+    // acessibilidade do subterrâneo: cano de saída no chão, moedas/plataformas ao alcance
+    const acc = await page.evaluate(() => {
+      const solids = window.__DINO.solids();
+      const H = window.__DINO.levelH;
+      const groundTop = H - 40;                 // topo do chão (última linha)
+      // cano de saída: sua base deve estar no chão (não flutuando alto)
+      const exit = solids.find(s => s.type === "pipe");
+      const exitBase = exit ? exit.y + exit.h : 0;
+      // plataformas mais altas: até ~4 tiles acima do chão (alcançáveis por pulo em degraus)
+      const bricks = solids.filter(s => s.type === "cavebrick");
+      const highest = bricks.length ? Math.min(...bricks.map(s => s.y)) : groundTop;
+      // moedas: a mais alta deve estar a no máx ~5 tiles do chão OU sobre plataforma
+      const coins = window.__DINO.coins();
+      const width = window.__DINO.levelW;
+      return { exitBase, groundTop, highestFromGround: (groundTop - highest) / 40, width };
+    });
+    check("cano de saída fica no chão (acessível)", Math.abs(acc.exitBase - acc.groundTop) < 2, JSON.stringify(acc));
+    check("plataformas do subterrâneo são alcançáveis (≤4 tiles)", acc.highestFromGround <= 4.01, JSON.stringify(acc));
+    check("fase subterrânea ficou mais longa (>2000px)", acc.width > 2000, JSON.stringify(acc));
     const audio = await page.evaluate(() => ({
       horror: typeof window.Sound.startHorror === "function" && typeof window.Sound.stopHorror === "function",
       suck: (() => { try { window.Sound.play("suck"); return true; } catch (e) { return false; } })(),

@@ -159,16 +159,16 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   // Cenário subterrâneo especial (acessado pelos canos): escuro, com morcegos,
   // moedas e um cano de saída. 'X' = cano de saída (volta à fase).
   const UNDERGROUND_MAP =
-`GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
-G......................................G
-G...?...?...?.......?...?...?...?.......G
-G......................................G
-G..BBBB.....b.....BBBB......b....BBBB...G
-G..............................b.......G
-G......b..............b................G
-G....................................X.G
-G..P...................................G
-GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
+`GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+G......................................................................G
+G...........b..........................................................G
+G...............b.............................b.................b......G
+G.......................????..b...................b.....????...........G
+G.......................BBBB............................BBBBb..........G
+G.......????............................????............????...........G
+G.......BBBB............BBBB............BBBB............BBBB...........G
+G.P...?.......?.......?...........?...........?.......?.......?.....X..G
+GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
 
   // ============================================================
@@ -704,10 +704,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         }
       }
     }
-    // Sair do subterrâneo pelo cano de saída
+    // Sair do subterrâneo pelo cano de saída: basta chegar perto e apertar ↓
+    // (o cano fica no chão, então não exige subir em cima).
     if (underground && exitPipe && keys.down && p.onGround) {
       const mouth = exitPipe.x + exitPipe.w / 2;
-      if (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.7 && Math.abs((p.y + p.h) - exitPipe.y) < 8) {
+      if (Math.abs((p.x + p.w/2) - mouth) < TILE) {
         exitUnderground();
         return;
       }
@@ -1388,11 +1389,15 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function drawPipeHint() {
     const p = player;
     if (!p.onGround) return;
-    const list = pipes.concat(exitPipe ? [exitPipe] : []);
-    for (const pipe of list) {
+    // canos de entrada: dica ao ficar em cima; cano de saída: ao chegar perto
+    const list = pipes.map(pp => ({ pipe: pp, exit: false })).concat(exitPipe ? [{ pipe: exitPipe, exit: true }] : []);
+    for (const { pipe, exit } of list) {
       const mouth = pipe.x + pipe.w / 2;
-      if (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.6 && Math.abs((p.y + p.h) - pipe.y) < 8) {
-        const hx = mouth - cameraX, hy = pipe.y - 26;
+      const near = exit
+        ? Math.abs((p.x + p.w/2) - mouth) < TILE
+        : (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.6 && Math.abs((p.y + p.h) - pipe.y) < 8);
+      if (near) {
+        const hx = mouth - cameraX, hy = (exit ? pipe.y : pipe.y) - 26;
         ctx.fillStyle = "rgba(0,0,0,.55)";
         roundRect(hx - 34, hy - 14, 68, 22, 6); ctx.fill();
         ctx.fillStyle = "#fff"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1631,6 +1636,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       get sliding() { return !!flagAnim; },
       get state() { return state; },
       get levelH() { return levelH; },
+      get levelW() { return levelW; },
       get underground() { return underground; },
       get unlocked() { return unlocked; },
       setUnlocked: (n) => { unlocked = n; },

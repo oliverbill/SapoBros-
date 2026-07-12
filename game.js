@@ -145,15 +145,16 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   // Posições validadas: bloco flutuando com espaço vazio embaixo (acessível
   // por cabeçada). Nunca colocar sobre outro bloco (ficaria inacessível).
   const QBLOCKS_BY_LEVEL = [
-    [ {col:8,  row:6, item:"mushroom"}, {col:52, row:6, item:"fire"} ],
-    [ {col:10, row:5, item:"mushroom"}, {col:52, row:5, item:"fly"} ],
-    [ {col:14, row:5, item:"mushroom"}, {col:53, row:5, item:"fire"} ],
+    [ {col:6,  row:6, item:"mushroom"}, {col:37, row:6, item:"fire"} ],
+    [ {col:11, row:5, item:"mushroom"}, {col:39, row:5, item:"fly"} ],
+    [ {col:6,  row:5, item:"mushroom"}, {col:37, row:5, item:"fire"} ],
   ];
   // Canos gigantes por fase: o jogador entra (seta para baixo) para o subterrâneo.
+  // Posições validadas: base no chão, espaço livre acima (subir/entrar/pular por cima).
   const PIPES_BY_LEVEL = [
-    [ {col:56, row:7} ],
-    [ {col:58, row:7} ],
-    [ {col:58, row:7} ],
+    [ {col:59, row:7} ],
+    [ {col:62, row:6} ],
+    [ {col:46, row:6} ],
   ];
 
   // Cenário subterrâneo especial (acessado pelos canos): escuro, com morcegos,
@@ -311,11 +312,14 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       if (belowBlocked) return;   // sem espaço embaixo -> ignora (inacessível)
       solids.push({ x:bx, y:by, w:TILE, h:TILE, type:"question", item:q.item, used:false, bump:0 });
     });
-    // canos gigantes (2x2 tiles) que levam ao subterrâneo
+    // canos gigantes (2x2 tiles) que levam ao subterrâneo. Proteção: não
+    // colocar se o corpo do cano se sobrepõe a algum bloco existente (viraria
+    // parede/entrada bloqueada).
     (PIPES_BY_LEVEL[idx] || []).forEach(p => {
       const px = p.col*TILE, py = p.row*TILE;
-      const pipe = { x:px, y:py, w:TILE*2, h:TILE*2 };
-      pipes.push(pipe);
+      const body = { x:px, y:py, w:TILE*2, h:TILE*2 };
+      if (solids.some(s => rectsOverlap(body, s))) return;   // sobreposto -> ignora
+      pipes.push(body);
       solids.push({ x:px, y:py, w:TILE*2, h:TILE*2, type:"pipe" });
     });
     respawnPlayer(false);   // mantém o poder atual ao entrar numa fase nova

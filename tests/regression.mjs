@@ -439,6 +439,35 @@ try {
     await ctx.close();
   }
 
+  // ---------- 17. Canos e blocos não bloqueiam passagem (todas as fases) ----------
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#startBtn"); await sleep(120);
+    const bad = await page.evaluate(async () => {
+      const T = 40, problems = [];
+      for (let lvl = 0; lvl < 3; lvl++) {
+        window.__DINO.enterLevel(lvl);
+        await new Promise(r => setTimeout(r, 40));
+        const solids = window.__DINO.solids();
+        const solidAt = (x, y) => solids.some(s => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h);
+        // cada cano: as 2 células diretamente acima do topo devem estar livres
+        for (const p of window.__DINO.pipes()) {
+          for (const dx of [T * 0.5, T * 1.5]) {
+            if (solidAt(p.x + dx, p.y - T * 0.5)) problems.push(`L${lvl} cano bloqueado acima`);
+          }
+        }
+        // cada bloco "?": espaço vazio logo abaixo (cabeçada possível)
+        for (const q of solids.filter(s => s.type === "question")) {
+          if (solidAt(q.x + T * 0.5, q.y + T + 6)) problems.push(`L${lvl} bloco ? sobre sólido`);
+        }
+      }
+      return problems;
+    });
+    check("canos têm espaço livre acima (entrar/pular por cima)", bad.filter(x => x.includes("cano")).length === 0, bad.join("; "));
+    check("nenhum bloco ? inacessível em nenhuma fase", bad.filter(x => x.includes("bloco")).length === 0, bad.join("; "));
+    await ctx.close();
+  }
+
   // O Chromium headless (CI) não decodifica AAC/m4a — as vozes tocam no Safari.
   // Ignoramos só erros de codec de áudio; qualquer outro reprova o teste.
   const realErrors = pageErrors.filter((e) => !/decode audio data|no supported source|supported sources|NotSupportedError|failed to load because/i.test(e));

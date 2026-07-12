@@ -61,6 +61,12 @@ async function newGame(opts = {}) {
   await sleep(300);
   return { ctx, page };
 }
+// Inicia o jogo e entra na fase 1 (o "Novo jogo" agora abre o mapa)
+async function startPlay(page) {
+  await page.click("#startBtn"); await sleep(150);
+  await page.evaluate(() => window.__DINO.enterLevel(0));
+  await sleep(150);
+}
 
 try {
   // ---------- 1. Tela inicial ----------
@@ -86,7 +92,7 @@ try {
   // ---------- 2. Cogumelo cresce ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const r = await page.evaluate(() => {
       const h0 = window.__DINO.player.h;
       window.__DINO.give("mushroom");
@@ -111,7 +117,7 @@ try {
   // ---------- 3. Flor de fogo + botão + tiro (regressão do botão de fogo) ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     await page.evaluate(() => window.__DINO.give("fire"));
     await sleep(30);
     const btnHidden = await page.evaluate(() => document.getElementById("btnFire").classList.contains("hidden"));
@@ -129,7 +135,7 @@ try {
   // ---------- 4. Flor voadora permite voar ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     await page.evaluate(() => window.__DINO.give("fly"));
     const y0 = await page.evaluate(() => window.__DINO.player.y);
     await page.keyboard.down("ArrowUp"); await sleep(600); await page.keyboard.up("ArrowUp");
@@ -141,7 +147,7 @@ try {
   // ---------- 5. Flor NÃO fica enterrada (regressão) ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(500);   // deixa a gravidade assentar
+    await startPlay(page); await sleep(400);   // deixa a gravidade assentar
     const r = await page.evaluate(() => {
       const flowers = window.__DINO.powerups().filter(u => u.type === "fire" || u.type === "fly");
       const solids = window.__DINO.solids();
@@ -166,7 +172,7 @@ try {
   // ---------- 6. Moeda dá pontos ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const gained = await page.evaluate(async () => {
       const s0 = +document.getElementById("score").textContent;
       const c = window.__DINO.coins().find(c => !c.taken);
@@ -182,7 +188,7 @@ try {
   // ---------- 7. Pisar no inimigo derrota (e pontua) ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const r = await page.evaluate(async () => {
       const e = window.__DINO.enemies().find(e => e.alive);
       const pl = window.__DINO.player;
@@ -214,7 +220,7 @@ try {
   // ---------- 9. Controles de toque centralizados na horizontal (regressão) ----------
   {
     const { ctx, page } = await newGame({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const box = await page.evaluate(() => {
       const r = document.querySelector(".pad.left").getBoundingClientRect();
       return { center: (r.top + r.bottom) / 2, vh: innerHeight, bottom: r.bottom };
@@ -227,7 +233,7 @@ try {
   // ---------- 10. Salvar/continuar ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("sapobros_save_v1")));
     await page.reload(); await sleep(300);
     const cont = await page.evaluate(() => {
@@ -242,7 +248,7 @@ try {
   // ---------- 11. Pausa e menu inicial ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     // pausar
     await page.click("#pauseBtn"); await sleep(50);
     const paused = await page.evaluate(() => ({ state: window.__DINO.state, overlay: !document.getElementById("pauseScreen").classList.contains("hidden") }));
@@ -268,7 +274,7 @@ try {
   {
     const { ctx, page } = await newGame();
     await page.click("#invincibleToggle"); await sleep(30);   // liga o modo
-    await page.click("#startBtn"); await sleep(200);
+    await startPlay(page);
     const hud = await page.evaluate(() => document.getElementById("lives").textContent);
     check("HUD mostra escudo no modo invencível", hud === "🛡️", hud);
 
@@ -298,7 +304,7 @@ try {
   // ---------- 13. Morte do Jones dispara a voz sem erro ----------
   {
     const { ctx, page } = await newGame();
-    await page.click("#startBtn"); await sleep(200);   // Jones é o padrão (char 0)
+    await startPlay(page);   // Jones é o padrão (char 0)
     const r = await page.evaluate(async () => {
       const pl = window.__DINO.player;
       pl.y = window.__DINO.levelH + 200;               // cai no buraco -> morre
@@ -306,6 +312,56 @@ try {
       return { dead: pl.dead, hasJones: window.Sound.hasVoice("jones") };
     });
     check("Jones morre e a voz de morte está disponível", r.dead === true && r.hasJones === true, JSON.stringify(r));
+    await ctx.close();
+  }
+
+  // ---------- 14. Mapa de fases (desbloqueio progressivo) ----------
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#startBtn"); await sleep(150);       // vai ao mapa
+    const onMap = await page.evaluate(() => ({ state: window.__DINO.state, unlocked: window.__DINO.unlocked }));
+    check("novo jogo abre o mapa de fases", onMap.state === "map", JSON.stringify(onMap));
+    check("apenas a 1ª fase começa desbloqueada", onMap.unlocked === 0, JSON.stringify(onMap));
+    // completar a fase 1 (tocar a bandeira) desbloqueia a 2
+    await page.evaluate(() => window.__DINO.enterLevel(0)); await sleep(120);
+    const done = await page.evaluate(async () => {
+      const pl = window.__DINO.player, f = window.__DINO.flag();
+      pl.x = f.x - 4; pl.y = f.y + 10;      // teleporta sobre a bandeira
+      for (let i = 0; i < 30 && window.__DINO.state === "play"; i++) await new Promise(r => setTimeout(r, 30));
+      return { state: window.__DINO.state, unlocked: window.__DINO.unlocked };
+    });
+    check("completar a fase desbloqueia a próxima", done.unlocked >= 1, JSON.stringify(done));
+    await ctx.close();
+  }
+
+  // ---------- 15. Bloco "?" solta item na cabeçada ----------
+  {
+    const { ctx, page } = await newGame();
+    await startPlay(page);
+    const r = await page.evaluate(async () => {
+      const before = window.__DINO.powerups().length;
+      window.__DINO.hitBlock();                 // simula a cabeçada num bloco "?"
+      await new Promise(r => setTimeout(r, 60));
+      const q = window.__DINO.solids().find(s => s.type === "question");
+      return { before, after: window.__DINO.powerups().length, used: q && q.used };
+    });
+    check("bloco ? solta um item na cabeçada", r.after > r.before, JSON.stringify(r));
+    check("bloco ? fica gasto após soltar", r.used === true, JSON.stringify(r));
+    await ctx.close();
+  }
+
+  // ---------- 16. Cano gigante leva ao subterrâneo (morcegos + volta) ----------
+  {
+    const { ctx, page } = await newGame();
+    await startPlay(page);
+    const inCave = await page.evaluate(async () => {
+      window.__DINO.enterPipeNow();
+      await new Promise(r => setTimeout(r, 80));
+      const bats = window.__DINO.enemies().filter(e => e.type === "bat").length;
+      return { underground: window.__DINO.underground, bats, state: window.__DINO.state };
+    });
+    check("entrar no cano abre o subterrâneo", inCave.underground === true && inCave.state === "play", JSON.stringify(inCave));
+    check("subterrâneo tem morcegos voando", inCave.bats > 0, JSON.stringify(inCave));
     await ctx.close();
   }
 

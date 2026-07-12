@@ -138,23 +138,57 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       powerups.push({ x:x+6, y:y+6, w:28, h:30, type, vx:0, vy:0, taken:false, phase:Math.random()*6.28 });
   }
 
+  // Blocos "?" por fase: soltam um item quando o jogador dá uma cabeçada por baixo.
+  const QBLOCKS_BY_LEVEL = [
+    [ {col:14, row:5, item:"mushroom"}, {col:44, row:5, item:"fire"} ],
+    [ {col:20, row:5, item:"mushroom"}, {col:52, row:4, item:"fly"} ],
+    [ {col:16, row:4, item:"mushroom"}, {col:48, row:5, item:"fire"} ],
+  ];
+  // Canos gigantes por fase: o jogador entra (seta para baixo) para o subterrâneo.
+  const PIPES_BY_LEVEL = [
+    [ {col:56, row:7} ],
+    [ {col:58, row:7} ],
+    [ {col:58, row:7} ],
+  ];
+
+  // Cenário subterrâneo especial (acessado pelos canos): escuro, com morcegos,
+  // moedas e um cano de saída. 'X' = cano de saída (volta à fase).
+  const UNDERGROUND_MAP =
+`GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+G......................................G
+G...?...?...?.......?...?...?...?.......G
+G......................................G
+G..BBBB.....b.....BBBB......b....BBBB...G
+G..............................b.......G
+G......b..............b................G
+G....................................X.G
+G..P...................................G
+GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
+
+
   // ============================================================
   //  WORLD STATE
   // ============================================================
-  let state = "start"; // start | play | dead | win | gameover
+  let state = "start"; // start | map | play | paused | dead | win | gameover | levelend
   let levelIdx = 0;
+  let unlocked = 0;              // maior fase desbloqueada no mapa (0-based)
+  let mapSel = 0;                // nó selecionado no mapa
   let score = 0, lives = 3;
   let infinite = false;          // modo vidas infinitas
   let invincible = false;        // modo invencível (não morre nunca)
   let audioMuted = false;        // som ligado/desligado
   const START_LIVES = 3;
   const SAVE_KEY = "sapobros_save_v1";
-  let solids = [];   // {x,y,w,h}
+  let solids = [];   // {x,y,w,h,type}
   let coins = [];    // {x,y,w,h,taken,phase}
-  let enemies = [];  // {x,y,w,h,vx,alive,squash}
+  let enemies = [];  // {x,y,w,h,vx,alive,squash,type}
   let powerups = []; // {x,y,w,h,type,vx,vy,taken,phase} type: mushroom|fire|fly
   let fireballs = []; // {x,y,w,h,vx,vy,dead}
+  let pipes = [];    // {x,y,w,h} canos gigantes (entrada p/ subterrâneo)
   let flag = null;   // {x,y,w,h}
+  let exitPipe = null;          // cano de saída (no subterrâneo)
+  let underground = false;      // cena subterrânea ativa?
+  let pipeReturn = null;        // {levelIdx, x, y} para voltar do subterrâneo
   let levelW = 0, levelH = 0;
   let cameraX = 0;
   let particles = [];
@@ -180,13 +214,17 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   // ============================================================
   //  INPUT
   // ============================================================
-  const keys = { left:false, right:false, jump:false, jumpHeld:false, fire:false };
+  const keys = { left:false, right:false, down:false, jump:false, jumpHeld:false, fire:false };
 
   addEventListener("keydown", e => {
     if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," "].includes(e.key)) e.preventDefault();
-    if (e.key === "ArrowLeft") keys.left = true;
-    if (e.key === "ArrowRight") keys.right = true;
-    if (e.key === "ArrowUp" || e.key === " ") { if (!keys.jumpHeld) keys.jump = true; keys.jumpHeld = true; }
+    if (e.key === "ArrowLeft") { keys.left = true; if (state === "map" && !e.repeat) mapMove(-1); }
+    if (e.key === "ArrowRight") { keys.right = true; if (state === "map" && !e.repeat) mapMove(1); }
+    if (e.key === "ArrowDown") keys.down = true;
+    if (e.key === "ArrowUp" || e.key === " ") {
+      if (!keys.jumpHeld) { keys.jump = true; if (state === "map") mapEnter(); }
+      keys.jumpHeld = true;
+    }
     const k = e.key.toLowerCase();
     if (k === "f" || k === "x") { if (!e.repeat) keys.fire = true; }
     if (k === "m") { if (!e.repeat) toggleMute(); }
@@ -195,12 +233,14 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   addEventListener("keyup", e => {
     if (e.key === "ArrowLeft") keys.left = false;
     if (e.key === "ArrowRight") keys.right = false;
+    if (e.key === "ArrowDown") keys.down = false;
     if (e.key === "ArrowUp" || e.key === " ") keys.jumpHeld = false;
   });
 
   // Touch buttons
   function bindTouch(id, on, off) {
     const el = document.getElementById(id);
+    if (!el) return;
     const start = e => { e.preventDefault(); on(); };
     const end   = e => { e.preventDefault(); off(); };
     el.addEventListener("touchstart", start, {passive:false});
@@ -210,9 +250,10 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     el.addEventListener("mouseup", end);
     el.addEventListener("mouseleave", end);
   }
-  bindTouch("btnLeft",  () => keys.left = true,  () => keys.left = false);
-  bindTouch("btnRight", () => keys.right = true, () => keys.right = false);
-  bindTouch("btnJump",  () => { keys.jump = true; keys.jumpHeld = true; }, () => keys.jumpHeld = false);
+  bindTouch("btnLeft",  () => { keys.left = true; if (state === "map") mapMove(-1); },  () => keys.left = false);
+  bindTouch("btnRight", () => { keys.right = true; if (state === "map") mapMove(1); }, () => keys.right = false);
+  bindTouch("btnDown",  () => { keys.down = true; }, () => keys.down = false);
+  bindTouch("btnJump",  () => { keys.jump = true; keys.jumpHeld = true; if (state === "map") mapEnter(); }, () => keys.jumpHeld = false);
   bindTouch("btnFire",  () => { keys.fire = true; }, () => {});
 
   if ("ontouchstart" in window) touchLayer.classList.add("on");
@@ -220,10 +261,16 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   // ============================================================
   //  LEVEL LOADING
   // ============================================================
+  // Zera todas as listas de uma cena
+  function clearScene() {
+    solids = []; coins = []; enemies = []; particles = []; flag = null;
+    powerups = []; fireballs = []; pipes = []; exitPipe = null;
+  }
+
   function loadLevel(idx) {
     const map = LEVELS[idx].split("\n");
-    solids = []; coins = []; enemies = []; particles = []; flag = null;
-    powerups = []; fireballs = [];
+    clearScene();
+    underground = false;
     levelH = map.length * TILE;
     levelW = map[0].length * TILE;
 
@@ -236,13 +283,10 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         } else if (ch === "?") {
           coins.push({ x:x+10, y:y+8, w:20, h:24, taken:false, phase:Math.random()*6.28 });
         } else if (ch === "E") {
-          enemies.push({ x:x+4, y:y+6, w:32, h:32, vx:-0.9, alive:true, squash:0 });
-        } else if (ch === "M") {
-          spawnPowerup("mushroom", x, y);
-        } else if (ch === "R") {
-          spawnPowerup("fire", x, y);
-        } else if (ch === "V") {
-          spawnPowerup("fly", x, y);
+          enemies.push({ x:x+4, y:y+6, w:32, h:32, vx:-0.9, alive:true, squash:0, type:"beetle" });
+        } else if (ch === "M") { spawnPowerup("mushroom", x, y);
+        } else if (ch === "R") { spawnPowerup("fire", x, y);
+        } else if (ch === "V") { spawnPowerup("fly", x, y);
         } else if (ch === "F") {
           flag = { x:x+16, y:y - TILE*2, w:8, h:TILE*3 };
         } else if (ch === "P") {
@@ -250,10 +294,51 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         }
       }
     }
-    // power-ups posicionados por coordenada de tile
     (POWERUPS_BY_LEVEL[idx] || []).forEach(pu => spawnPowerup(pu.type, pu.col * TILE, pu.row * TILE));
+    // blocos "?" (soltam item na cabeçada)
+    (QBLOCKS_BY_LEVEL[idx] || []).forEach(q =>
+      solids.push({ x:q.col*TILE, y:q.row*TILE, w:TILE, h:TILE, type:"question", item:q.item, used:false, bump:0 }));
+    // canos gigantes (2x2 tiles) que levam ao subterrâneo
+    (PIPES_BY_LEVEL[idx] || []).forEach(p => {
+      const px = p.col*TILE, py = p.row*TILE;
+      const pipe = { x:px, y:py, w:TILE*2, h:TILE*2 };
+      pipes.push(pipe);
+      solids.push({ x:px, y:py, w:TILE*2, h:TILE*2, type:"pipe" });
+    });
     respawnPlayer(false);   // mantém o poder atual ao entrar numa fase nova
     cameraX = 0;
+  }
+
+  // Cena subterrânea especial (acessada por um cano). Guarda de onde voltar.
+  function loadUnderground(fromLevel, retX, retY) {
+    const map = UNDERGROUND_MAP.split("\n");
+    clearScene();
+    underground = true;
+    pipeReturn = { levelIdx: fromLevel, x: retX, y: retY };
+    levelH = map.length * TILE;
+    levelW = map[0].length * TILE;
+    for (let r = 0; r < map.length; r++) {
+      for (let c = 0; c < map[r].length; c++) {
+        const ch = map[r][c];
+        const x = c * TILE, y = r * TILE;
+        if (ch === "G" || ch === "B") {
+          solids.push({ x, y, w:TILE, h:TILE, type: ch === "G" ? "cave" : "cavebrick" });
+        } else if (ch === "?") {
+          coins.push({ x:x+10, y:y+8, w:20, h:24, taken:false, phase:Math.random()*6.28 });
+        } else if (ch === "b") {
+          // morcego (voa em padrão senoidal)
+          enemies.push({ x:x+4, y:y+6, w:30, h:24, vx:(Math.random()<.5?-1:1)*1.3, vy:0, baseY:y+6, alive:true, squash:0, type:"bat", ph:Math.random()*6.28 });
+        } else if (ch === "X") {
+          exitPipe = { x, y:y - TILE, w:TILE, h:TILE*2 };       // cano de saída
+          solids.push({ x, y:y - TILE, w:TILE, h:TILE*2, type:"pipe" });
+        } else if (ch === "P") {
+          player.spawnX = x; player.spawnY = y;
+        }
+      }
+    }
+    respawnPlayer(false);
+    cameraX = 0;
+    if (window.Sound && window.Sound.startWolves) window.Sound.startWolves();
   }
 
   // resetPower=true zera para "small" (usado ao morrer/começar); senão mantém.
@@ -278,7 +363,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
       localStorage.setItem(SAVE_KEY, JSON.stringify({
         chosen, infinite, invincible, muted: audioMuted,   // preferências (sempre)
         inProgress,                       // há um jogo em andamento?
-        levelIdx, score, lives: isFinite(lives) ? lives : START_LIVES,
+        levelIdx, unlocked, score, lives: isFinite(lives) ? lives : START_LIVES,
         power: player.power,              // poder atual (cogumelo/fogo/voo)
         best: bestScore()
       }));
@@ -303,7 +388,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   function startGame(fresh) {
     if (fresh) {
       levelIdx = 0; score = 0; lives = infinite ? Infinity : START_LIVES;
-      player.power = "small";
+      unlocked = 0; player.power = "small";
     } else {
       const s = readSave();
       if (s) {
@@ -311,21 +396,51 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         infinite = !!s.infinite;
         invincible = !!s.invincible;
         levelIdx = s.levelIdx ?? 0;
+        unlocked = s.unlocked ?? 0;
         score    = s.score ?? 0;
         lives    = infinite ? Infinity : (s.lives ?? START_LIVES);
         player.power = s.power || "small";
       } else {
-        levelIdx = 0; score = 0; lives = infinite ? Infinity : START_LIVES;
+        levelIdx = 0; unlocked = 0; score = 0; lives = infinite ? Infinity : START_LIVES;
         player.power = "small";
       }
     }
+    if (window.Sound) window.Sound.resume();   // desbloqueia áudio no gesto
+    openMap(Math.min(levelIdx, unlocked));
+  }
+
+  // Abre o mapa de fases (hub do jogo)
+  function openMap(sel) {
     startScreen.classList.add("hidden");
     msgScreen.classList.add("hidden");
+    pauseScreen.classList.add("hidden");
+    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
+    musicStop();
+    mapSel = Math.max(0, Math.min(sel ?? 0, unlocked));
+    state = "map";
+    updateHUD();
+    saveProgress();
+  }
+
+  // Entra na fase selecionada no mapa
+  function enterLevel(idx) {
+    levelIdx = idx;
     loadLevel(levelIdx);
     state = "play";
     updateHUD();
     saveProgress();
     if (window.Sound) { window.Sound.resume(); musicStart(); }
+  }
+
+  // Navegação do mapa (setas) e confirmação (pular)
+  function mapMove(dir) {
+    if (state !== "map") return;
+    mapSel = Math.max(0, Math.min(mapSel + dir, unlocked));
+  }
+  function mapEnter() {
+    if (state !== "map") return;
+    if (window.Sound) window.Sound.resume();
+    enterLevel(mapSel);
   }
 
   function showMsg(title, text, btn) {
@@ -350,9 +465,10 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
   // Volta ao menu inicial, salvando o progresso (Continuar fica disponível)
   function goToMenu() {
-    if (state !== "play" && state !== "paused") return;
-    saveProgress();               // com inProgress=true (estado ainda é play/paused)
+    if (state !== "play" && state !== "paused" && state !== "map") return;
+    saveProgress();
     musicStop();
+    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
     state = "start";
     pauseScreen.classList.add("hidden");
     msgScreen.classList.add("hidden");
@@ -360,18 +476,42 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     refreshStartScreen();
   }
 
-  function nextLevel() {
-    levelIdx++;
+  // Entra no cano gigante -> cena subterrânea especial
+  function enterPipe(pipe) {
+    const retX = pipe.x + pipe.w/2 - player.w/2;
+    const retY = pipe.y - player.h;
+    snd("pipe");
+    loadUnderground(levelIdx, retX, retY);
+    state = "play";
+    updateHUD();
+  }
+
+  // Sai do subterrâneo pelo cano de saída -> volta à fase de origem
+  function exitUnderground() {
+    snd("pipe");
+    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
+    const ret = pipeReturn || { levelIdx: 0, x: 80, y: 320 };
+    loadLevel(ret.levelIdx);
+    player.x = ret.x; player.y = ret.y;
+    player.vx = 0; player.vy = 0;
+    player.safeX = ret.x; player.safeY = ret.y;
+    state = "play";
+    updateHUD();
+    musicStart();
+  }
+
+  function completeLevel() {
     musicStop();
     snd("levelclear");
-    if (levelIdx >= LEVELS.length) {
+    unlocked = Math.max(unlocked, Math.min(levelIdx + 1, LEVELS.length - 1));
+    if (levelIdx + 1 >= LEVELS.length) {
       state = "win";
-      saveProgress();   // guarda preferências, marca jogo como concluído (sem "continuar")
+      saveProgress();   // jogo concluído
       showMsg("🏆 Você venceu!", `Parabéns! ${CHARACTERS[chosen].name} atravessou todo o bosque. Pontuação final: ${score} 🍎`, "🔁 Jogar de novo");
     } else {
       state = "levelend";
       saveProgress();
-      showMsg("✔ Fase concluída!", `Rumo à fase ${levelIdx + 1}. Pontuação: ${score} 🍎`, "▶ Próxima fase");
+      showMsg("✔ Fase concluída!", `Fase ${levelIdx + 2} desbloqueada no mapa! Pontuação: ${score} 🍎`, "🗺️ Ir ao mapa");
     }
   }
 
@@ -491,13 +631,33 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     updatePowerups();
     updateFireballs();
     updateParticles();
+    for (const s of solids) if (s.bump > 0) s.bump--;   // animação da cabeçada no "?"
 
     // Flag / goal
     if (flag && rectsOverlap(p, flag)) {
       score += 500;
       updateHUD();
-      nextLevel();
+      completeLevel();
       return;
+    }
+
+    // Entrar no cano gigante (seta para baixo em cima da boca do cano)
+    if (keys.down && p.onGround) {
+      for (const pipe of pipes) {
+        const mouth = pipe.x + pipe.w / 2;
+        if (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.6 && Math.abs((p.y + p.h) - pipe.y) < 6) {
+          enterPipe(pipe);
+          return;
+        }
+      }
+    }
+    // Sair do subterrâneo pelo cano de saída
+    if (underground && exitPipe && keys.down && p.onGround) {
+      const mouth = exitPipe.x + exitPipe.w / 2;
+      if (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.7 && Math.abs((p.y + p.h) - exitPipe.y) < 8) {
+        exitUnderground();
+        return;
+      }
     }
 
     // Camera follows player
@@ -515,9 +675,23 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         o.vx = 0;
       } else {
         if (o.vy > 0) { o.y = s.y - o.h; o.onGround = true; o.vy = 0; }
-        else if (o.vy < 0) { o.y = s.y + s.h; o.vy = 0; }
+        else if (o.vy < 0) {
+          o.y = s.y + s.h; o.vy = 0;
+          if (s.type === "question" && o === player) hitQuestionBlock(s);   // cabeçada
+        }
       }
     }
+  }
+
+  // Cabeçada no bloco "?": solta o item por cima e "gasta" o bloco.
+  function hitQuestionBlock(s) {
+    if (s.used) return;
+    s.used = true; s.bump = 8;
+    snd("bump");
+    const px = s.x + (TILE - 28) / 2;
+    spawnPowerup(s.item || "mushroom", px, s.y - TILE);   // aparece por cima
+    const pu = powerups[powerups.length - 1];
+    if (pu) pu.vy = -4;                                    // pula para fora do bloco
   }
 
   function updateEnemies() {
@@ -525,38 +699,53 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     for (const e of enemies) {
       if (!e.alive) { e.squash = Math.max(0, e.squash - 1); continue; }
 
-      // Patrol with gravity
-      e.vy = (e.vy || 0) + GRAVITY;
-      if (e.vy > 14) e.vy = 14;
-
-      e.x += e.vx;
-      // turn at walls
-      for (const s of solids) {
-        if (rectsOverlap(e, s)) {
-          if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w;
-          e.vx *= -1;
-        }
-      }
-      e.y += e.vy;
-      let grounded = false;
-      for (const s of solids) {
-        if (rectsOverlap(e, s)) {
-          if (e.vy > 0) { e.y = s.y - e.h; e.vy = 0; grounded = true; }
-          else { e.y = s.y + s.h; e.vy = 0; }
-        }
-      }
-      // turn at ledges (avoid walking off edges)
-      if (grounded) {
-        const aheadX = e.vx > 0 ? e.x + e.w + 2 : e.x - 2;
-        const footY = e.y + e.h + 4;
-        let floor = false;
+      if (e.type === "bat") {
+        // Morcego: voa em padrão senoidal, sem gravidade, vira nas paredes
+        e.ph += 0.08;
+        e.x += e.vx;
         for (const s of solids) {
-          if (aheadX >= s.x && aheadX <= s.x + s.w && footY >= s.y && footY <= s.y + s.h) { floor = true; break; }
+          if (rectsOverlap(e, s)) {
+            if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w;
+            e.vx *= -1;
+          }
         }
-        if (!floor) e.vx *= -1;
+        e.y = e.baseY + Math.sin(e.ph) * 26;
+        if (e.x < TILE) { e.x = TILE; e.vx = Math.abs(e.vx); }
+        if (e.x + e.w > levelW - TILE) { e.x = levelW - TILE - e.w; e.vx = -Math.abs(e.vx); }
+      } else {
+        // Patrol with gravity
+        e.vy = (e.vy || 0) + GRAVITY;
+        if (e.vy > 14) e.vy = 14;
+
+        e.x += e.vx;
+        // turn at walls
+        for (const s of solids) {
+          if (rectsOverlap(e, s)) {
+            if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w;
+            e.vx *= -1;
+          }
+        }
+        e.y += e.vy;
+        let grounded = false;
+        for (const s of solids) {
+          if (rectsOverlap(e, s)) {
+            if (e.vy > 0) { e.y = s.y - e.h; e.vy = 0; grounded = true; }
+            else { e.y = s.y + s.h; e.vy = 0; }
+          }
+        }
+        // turn at ledges (avoid walking off edges)
+        if (grounded) {
+          const aheadX = e.vx > 0 ? e.x + e.w + 2 : e.x - 2;
+          const footY = e.y + e.h + 4;
+          let floor = false;
+          for (const s of solids) {
+            if (aheadX >= s.x && aheadX <= s.x + s.w && footY >= s.y && footY <= s.y + s.h) { floor = true; break; }
+          }
+          if (!floor) e.vx *= -1;
+        }
+        // fell off world
+        if (e.y > levelH + 80) e.alive = false;
       }
-      // fell off world
-      if (e.y > levelH + 80) e.alive = false;
 
       // Collision with player
       if (rectsOverlap(p, e) && !p.dead) {
@@ -755,6 +944,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   //  RENDER
   // ============================================================
   function drawBackground() {
+    if (underground) { drawCaveBackground(); return; }
     // sky gradient
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, "#5c94fc"); g.addColorStop(1, "#a8e0ff");
@@ -789,17 +979,46 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     ctx.arc(x + 44, y, 16, 0, 7); ctx.arc(x + 22, y - 8, 16, 0, 7);
     ctx.fill();
   }
+  // Fundo do cenário subterrâneo (escuro, com estalactites e uma lua)
+  function drawCaveBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#0a0e1a"); g.addColorStop(1, "#1a2138");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // lua pálida ao fundo
+    ctx.fillStyle = "rgba(210,220,255,.15)";
+    ctx.beginPath(); ctx.arc(W - 120, 70, 40, 0, 7); ctx.fill();
+    // estalactites no teto
+    ctx.fillStyle = "#141a2c";
+    const off = cameraX * 0.4;
+    for (let i = -1; i < 10; i++) {
+      const sx = i * 120 - (off % 120);
+      ctx.beginPath();
+      ctx.moveTo(sx, 0); ctx.lineTo(sx + 24, 0); ctx.lineTo(sx + 12, 46 + (i % 3) * 16);
+      ctx.closePath(); ctx.fill();
+    }
+  }
 
   function drawSolids() {
     for (const s of solids) {
       const sx = s.x - cameraX;
       if (sx + s.w < 0 || sx > W) continue;
-      if (s.type === "ground") {
+      if (s.type === "pipe") {
+        drawPipe(sx, s.y, s.w, s.h);
+      } else if (s.type === "question") {
+        drawQuestionBlock(sx, s.y, s);
+      } else if (s.type === "ground") {
         ctx.fillStyle = "#8a5a2b"; ctx.fillRect(sx, s.y, s.w, s.h);
         ctx.fillStyle = "#5fa83d"; ctx.fillRect(sx, s.y, s.w, 10);
         ctx.fillStyle = "#4d8a30"; ctx.fillRect(sx, s.y + 8, s.w, 4);
         ctx.fillStyle = "rgba(0,0,0,.12)";
         ctx.fillRect(sx + 6, s.y + 18, 5, 5); ctx.fillRect(sx + 24, s.y + 28, 5, 5);
+      } else if (s.type === "cave") {
+        ctx.fillStyle = "#2b3552"; ctx.fillRect(sx, s.y, s.w, s.h);
+        ctx.fillStyle = "#3a4670"; ctx.fillRect(sx, s.y, s.w, 8);
+        ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(sx + 8, s.y + 16, 5, 5); ctx.fillRect(sx + 26, s.y + 26, 4, 4);
+      } else if (s.type === "cavebrick") {
+        ctx.fillStyle = "#3d3450"; ctx.fillRect(sx, s.y, s.w, s.h);
+        ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.strokeRect(sx + .5, s.y + .5, s.w - 1, s.h - 1);
       } else {
         ctx.fillStyle = "#c96f2e"; ctx.fillRect(sx, s.y, s.w, s.h);
         ctx.fillStyle = "#a9551d"; ctx.fillRect(sx, s.y, s.w, 4); ctx.fillRect(sx, s.y + s.h - 4, s.w, 4);
@@ -807,6 +1026,40 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         ctx.strokeStyle = "rgba(0,0,0,.25)"; ctx.strokeRect(sx + .5, s.y + .5, s.w - 1, s.h - 1);
       }
     }
+  }
+
+  // Bloco "?" (dourado, com "?"; some vira bloco usado marrom). Anima na cabeçada.
+  function drawQuestionBlock(sx, y, s) {
+    const off = s.bump ? -Math.sin((s.bump / 8) * Math.PI) * 8 : 0;
+    const by = y + off;
+    if (s.used) {
+      ctx.fillStyle = "#9a6a34"; ctx.fillRect(sx, by, TILE, TILE);
+      ctx.fillStyle = "#7c5228"; ctx.fillRect(sx, by, TILE, 4); ctx.fillRect(sx, by + TILE - 4, TILE, 4);
+      ctx.strokeStyle = "rgba(0,0,0,.3)"; ctx.strokeRect(sx + .5, by + .5, TILE - 1, TILE - 1);
+      return;
+    }
+    ctx.fillStyle = "#f4b400"; ctx.fillRect(sx, by, TILE, TILE);
+    ctx.fillStyle = "#d99400"; ctx.fillRect(sx, by, TILE, 5); ctx.fillRect(sx, by + TILE - 5, TILE, 5);
+    ctx.strokeStyle = "#7a5200"; ctx.lineWidth = 2; ctx.strokeRect(sx + 1, by + 1, TILE - 2, TILE - 2);
+    // rebites
+    ctx.fillStyle = "#7a5200";
+    for (const [dx, dy] of [[4,4],[TILE-6,4],[4,TILE-6],[TILE-6,TILE-6]]) ctx.fillRect(sx + dx, by + dy, 3, 3);
+    // "?"
+    ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("?", sx + TILE / 2, by + TILE / 2 + 1);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+  }
+
+  // Cano verde gigante (rim + corpo)
+  function drawPipe(sx, y, w, h) {
+    ctx.fillStyle = "#2ea043"; ctx.fillRect(sx + 4, y + 14, w - 8, h - 14);       // corpo
+    ctx.fillStyle = "#3fd35b"; ctx.fillRect(sx + 8, y + 14, 6, h - 14);           // brilho
+    ctx.fillStyle = "#1f7a33"; ctx.fillRect(sx + w - 12, y + 14, 6, h - 14);      // sombra
+    ctx.fillStyle = "#2ea043"; ctx.fillRect(sx, y, w, 16);                        // borda
+    ctx.fillStyle = "#3fd35b"; ctx.fillRect(sx + 2, y + 2, w - 4, 5);
+    ctx.strokeStyle = "#14431f"; ctx.lineWidth = 2;
+    ctx.strokeRect(sx + .5, y + .5, w - 1, 15);
+    ctx.strokeRect(sx + 4.5, y + 14, w - 9, h - 14);
   }
 
   function drawCoins() {
@@ -931,8 +1184,34 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         }
         continue;
       }
-      drawEnemy(ex, e.y, e.w, e.h, e.vx);
+      if (e.type === "bat") drawBat(ex, e.y, e.w, e.h);
+      else drawEnemy(ex, e.y, e.w, e.h, e.vx);
     }
+  }
+
+  // Morcego: corpo escuro, asas batendo, olhinhos vermelhos
+  function drawBat(x, y, w, h) {
+    const cx = x + w/2, cy = y + h/2;
+    const flap = Math.sin(performance.now() / 90) * 0.7;
+    ctx.fillStyle = "#2b2140";
+    for (const sgn of [-1, 1]) {
+      ctx.save(); ctx.translate(cx, cy); ctx.scale(sgn, 1); ctx.rotate(-0.2 + flap);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(w * 0.5, -h * 0.4, w * 0.7, 0);
+      ctx.quadraticCurveTo(w * 0.55, h * 0.1, w * 0.35, h * 0.05);
+      ctx.quadraticCurveTo(w * 0.5, h * 0.25, 0, h * 0.1);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#3a2d54";
+    ctx.beginPath(); ctx.arc(cx, cy, h * 0.34, 0, 7); ctx.fill();
+    // orelhas
+    ctx.beginPath(); ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx - 9, cy - 13); ctx.lineTo(cx - 2, cy - 8);
+    ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx + 9, cy - 13); ctx.lineTo(cx + 2, cy - 8); ctx.closePath(); ctx.fill();
+    // olhos
+    ctx.fillStyle = "#ff4d4d";
+    ctx.beginPath(); ctx.arc(cx - 4, cy, 2.2, 0, 7); ctx.arc(cx + 4, cy, 2.2, 0, 7); ctx.fill();
   }
 
   // A grumpy spiky snail-beetle enemy
@@ -1031,6 +1310,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
   }
 
   function render() {
+    if (state === "map") { drawMap(); return; }
     drawBackground();
     drawSolids();
     drawCoins();
@@ -1046,6 +1326,70 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
         drawDino(player.x - cameraX, player.y, player.w, player.h, player.face, player.walk, chosen, player.dead);
       }
     }
+    // dica de entrada no cano
+    if (state === "play") drawPipeHint();
+  }
+
+  // Dica "↓ entrar" quando o jogador está sobre um cano
+  function drawPipeHint() {
+    const p = player;
+    if (!p.onGround) return;
+    const list = pipes.concat(exitPipe ? [exitPipe] : []);
+    for (const pipe of list) {
+      const mouth = pipe.x + pipe.w / 2;
+      if (Math.abs((p.x + p.w/2) - mouth) < TILE * 0.6 && Math.abs((p.y + p.h) - pipe.y) < 8) {
+        const hx = mouth - cameraX, hy = pipe.y - 26;
+        ctx.fillStyle = "rgba(0,0,0,.55)";
+        roundRect(hx - 34, hy - 14, 68, 22, 6); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("↓ entrar", hx, hy - 2);
+        ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+        break;
+      }
+    }
+  }
+
+  // ---------- MAPA DE FASES (overworld) ----------
+  const MAP_NODES = [
+    { x: 150, y: 300 }, { x: 400, y: 200 }, { x: 650, y: 320 },
+  ];
+  function drawMap() {
+    // fundo do overworld
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#7ec0ee"); g.addColorStop(1, "#bfe3a0");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    // "ilhas" verdes
+    ctx.fillStyle = "#6fae54";
+    for (let i = 0; i < 5; i++) hillArc(i * 200 + 40, H - 40, 130, 80);
+    // caminho ligando os nós
+    ctx.strokeStyle = "#e9d7a0"; ctx.lineWidth = 10; ctx.lineCap = "round";
+    ctx.setLineDash([2, 16]);
+    ctx.beginPath();
+    ctx.moveTo(MAP_NODES[0].x, MAP_NODES[0].y);
+    for (let i = 1; i < MAP_NODES.length; i++) ctx.lineTo(MAP_NODES[i].x, MAP_NODES[i].y);
+    ctx.stroke(); ctx.setLineDash([]);
+    // nós
+    for (let i = 0; i < MAP_NODES.length; i++) {
+      const n = MAP_NODES[i], open = i <= unlocked, sel = i === mapSel;
+      ctx.fillStyle = open ? (i < unlocked ? "#39c463" : "#ffd23f") : "#8a8f9a";
+      ctx.strokeStyle = sel ? "#fff" : "rgba(0,0,0,.35)"; ctx.lineWidth = sel ? 5 : 3;
+      ctx.beginPath(); ctx.arc(n.x, n.y, 26, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = open ? "#3a2000" : "#e8e8e8";
+      ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(open ? String(i + 1) : "🔒", n.x, n.y + 1);
+      if (i < unlocked) { ctx.fillText("✓", n.x + 22, n.y - 20); }
+    }
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
+    // personagem no nó selecionado
+    const sn = MAP_NODES[mapSel];
+    if (CHARACTERS[chosen].ready) drawSprite(ctx, chosen, sn.x, sn.y - 24, 56, 1, tick * 0.05 % 6.28, false);
+    // título + instrução
+    ctx.fillStyle = "rgba(0,0,0,.5)"; roundRect(W/2 - 150, 20, 300, 40, 10); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🗺️ MAPA DE FASES", W/2, 41);
+    ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.92)";
+    ctx.fillText("← →  escolher fase   ·   ↑ / ▲  entrar", W/2, H - 24);
+    ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
 
   // Draw a character sprite (from the photo) into the given 2D context,
@@ -1073,6 +1417,25 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     }
     g.restore();
   }
+
+  // Tocar num nó do mapa seleciona/entra na fase (se desbloqueada)
+  function onMapTap(clientX, clientY) {
+    if (state !== "map") return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = (clientX - rect.left) * (canvas.width / rect.width);
+    const cy = (clientY - rect.top) * (canvas.height / rect.height);
+    for (let i = 0; i < MAP_NODES.length; i++) {
+      const n = MAP_NODES[i];
+      if (i <= unlocked && Math.hypot(cx - n.x, cy - n.y) < 30) {
+        if (window.Sound) window.Sound.resume();
+        mapSel = i; enterLevel(i); return;
+      }
+    }
+  }
+  canvas.addEventListener("click", (e) => onMapTap(e.clientX, e.clientY));
+  canvas.addEventListener("touchstart", (e) => {
+    if (state === "map" && e.touches[0]) { e.preventDefault(); onMapTap(e.touches[0].clientX, e.touches[0].clientY); }
+  }, { passive: false });
 
   // ============================================================
   //  MAIN LOOP
@@ -1166,11 +1529,8 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
   msgBtn.addEventListener("click", () => {
     if (state === "levelend") {
-      loadLevel(levelIdx);
       msgScreen.classList.add("hidden");
-      state = "play";
-      updateHUD();
-      musicStart();
+      openMap(unlocked);                // volta ao mapa (próxima fase desbloqueada)
     } else if (state === "win" || state === "gameover") {
       msgScreen.classList.add("hidden");
       startScreen.classList.remove("hidden");
@@ -1204,13 +1564,21 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
     window.__DINO = {
       player,
       give: (t) => collectPower(t),
+      enterLevel: (i) => enterLevel(i),
+      enterPipeNow: () => { if (pipes[0]) enterPipe(pipes[0]); },
+      hitBlock: () => { const q = solids.find(s => s.type === "question" && !s.used); if (q) hitQuestionBlock(q); },
       fireballs: () => fireballs,
       powerups: () => powerups,
       coins: () => coins,
       enemies: () => enemies,
       solids: () => solids,
+      pipes: () => pipes,
+      flag: () => flag,
       get state() { return state; },
       get levelH() { return levelH; },
+      get underground() { return underground; },
+      get unlocked() { return unlocked; },
+      setUnlocked: (n) => { unlocked = n; },
     };
   }
 

@@ -103,6 +103,7 @@ window.Sound = (() => {
     levelclear: () => seq([[523,0.1],[659,0.1],[784,0.1],[1047,0.24],[784,0.08],[1047,0.34]], "square", 0.26),
     gameover:   () => seq([[392,0.16],[311,0.16],[262,0.16],[196,0.45]], "triangle", 0.3),
     oneup:      () => seq([[784,0.08],[1047,0.08],[1319,0.08],[1568,0.18]], "square", 0.24),
+    pipe:       () => seq([[520,0.06],[380,0.06],[280,0.08],[190,0.12]], "square", 0.28),
   };
 
   function play(name) {
@@ -149,10 +150,52 @@ window.Sound = (() => {
     if (timer) { clearInterval(timer); timer = null; }
   }
 
+  // ---- Uivo de lobo ao fundo (subterrâneo) — som sintetizado original ----
+  let wolvesOn = false, wolfTimer = null, wolfCount = 0;
+  function howl() {
+    if (!ensure() || muted) return;
+    const t0 = ctx.currentTime + 0.02;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    const vib = ctx.createOscillator();     // vibrato
+    const vibg = ctx.createGain();
+    osc.type = "sawtooth";
+    vib.frequency.value = 6; vibg.gain.value = 8;
+    vib.connect(vibg); vibg.connect(osc.frequency);
+    // envelope de altura: sobe, segura, cai (como um uivo)
+    osc.frequency.setValueAtTime(190, t0);
+    osc.frequency.linearRampToValueAtTime(340, t0 + 0.5);
+    osc.frequency.setValueAtTime(340, t0 + 1.1);
+    osc.frequency.linearRampToValueAtTime(180, t0 + 2.1);
+    // volume suave
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.10, t0 + 0.25);
+    g.gain.setValueAtTime(0.10, t0 + 1.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.2);
+    osc.connect(g); g.connect(master);
+    osc.start(t0); vib.start(t0);
+    osc.stop(t0 + 2.3); vib.stop(t0 + 2.3);
+  }
+  function wolfTick() {
+    if (!wolvesOn) return;
+    wolfCount = (wolfCount + 1) % 5;      // uiva a cada ~5s (timer de 1s)
+    if (wolfCount === 1) howl();
+  }
+  function startWolves() {
+    if (muted || wolvesOn || !ensure()) return;
+    wolvesOn = true; wolfCount = 0;
+    howl();
+    wolfTimer = setInterval(wolfTick, 1000);
+  }
+  function stopWolves() {
+    wolvesOn = false;
+    if (wolfTimer) { clearInterval(wolfTimer); wolfTimer = null; }
+  }
+
   function setMuted(m) {
     muted = !!m;
     if (master) master.gain.value = muted ? 0 : 0.22;
-    if (muted) stopMusic();
+    if (muted) { stopMusic(); stopWolves(); }
   }
 
   // Pré-decodifica as vozes já no carregamento (não depende de gesto):
@@ -162,6 +205,7 @@ window.Sound = (() => {
 
   return {
     play, playVoice, resume, startMusic, stopMusic, setMuted,
+    startWolves, stopWolves,
     preloadVoices: loadVoices,
     isMuted: () => muted,
     isMusicOn: () => musicOn,

@@ -41,6 +41,7 @@
   const menuBtn     = document.getElementById("menuBtn");
   const pauseBtn    = document.getElementById("pauseBtn");
   const homeBtn     = document.getElementById("homeBtn");
+  const hud         = document.getElementById("hud");
 
   // ============================================================
   //  CHARACTERS
@@ -757,6 +758,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   const POWER_ICON = { small:"—", big:"🍄", fire:"🔥", fly:"🪽" };
   const POWER_BG   = { small:"rgba(0,0,0,.28)", big:"rgba(220,60,50,.5)", fire:"rgba(255,120,40,.55)", fly:"rgba(80,160,255,.55)" };
   function updateHUD() {
+    // No mapa, esconde os dados da partida (mantém só o botão de som no canto)
+    const onMap = state === "map";
+    if (hud) hud.style.justifyContent = onMap ? "flex-end" : "space-between";
+    [$score.closest(".box"), $level.closest(".box"), $powerBox, $lives.closest(".box"), pauseBtn, homeBtn]
+      .forEach(el => { if (el) el.style.display = onMap ? "none" : ""; });
     $score.textContent = score;
     $level.textContent = levelIdx + 1;
     $lives.textContent = invincible ? "🛡️" : (infinite ? "∞" : lives);
@@ -1679,40 +1685,233 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     return nodes;
   })();
   const WORLD_COLOR = ["#5fa83d", "#2f9a58", "#e0b866", "#8a6ad6", "#7fb8ff"];  // por tema
+  const WORLD_NAME  = ["🌳 Bosque", "🌴 Selva", "🏖️ Praia", "🏰 Castelo", "☁️ Céu"];
+
+  // Decorações do mapa: posições fixas escolhidas nos "vãos" da grade de nós
+  // (nós ficam em y=120/235/350; a decoração usa y=82/177/292/400 e fica longe
+  //  do caminho). Arte 100% original desenhada abaixo.
+  const MAP_DECOR = [
+    { t: "mtn",   x: 150, y: 84,  s: 1.0 },
+    { t: "mtn",   x: 470, y: 82,  s: 1.25 },
+    { t: "tree",  x: 320, y: 80,  s: 0.9 },
+    { t: "tree2", x: 645, y: 82,  s: 1.0 },
+    { t: "tree",  x: 78,  y: 177, s: 1.0 },
+    { t: "tree2", x: 239, y: 177, s: 1.1 },
+    { t: "pond",  x: 400, y: 182, s: 1.0 },
+    { t: "tree",  x: 561, y: 177, s: 1.0 },
+    { t: "bush",  x: 239, y: 294, s: 1.0 },
+    { t: "tree2", x: 400, y: 292, s: 1.0 },
+    { t: "castle",x: 561, y: 298, s: 1.0 },
+    { t: "tree",  x: 722, y: 292, s: 1.0 },
+    { t: "palm",  x: 150, y: 402, s: 1.0 },
+    { t: "bush",  x: 320, y: 404, s: 1.0 },
+    { t: "bush",  x: 480, y: 404, s: 1.0 },
+    { t: "palm",  x: 645, y: 402, s: 1.0 },
+  ];
+
+  // Forma orgânica fechada (litoral irregular) centrada em (cx,cy)
+  function mapBlob(cx, cy, rx, ry, wob, ph) {
+    const N = 46;
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const r = 1 + Math.sin(a * 3 + ph) * wob + Math.sin(a * 5 + ph * 1.7) * (wob * 0.5);
+      const x = cx + Math.cos(a) * rx * r, y = cy + Math.sin(a) * ry * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  }
+  function mapShadow(x, footY, w) {
+    ctx.fillStyle = "rgba(20,60,20,.16)";
+    ctx.beginPath(); ctx.ellipse(x, footY, w, w * 0.38, 0, 0, 7); ctx.fill();
+  }
+  function mapTree(x, footY, s, dark) {
+    mapShadow(x, footY, 15 * s);
+    ctx.fillStyle = "#7a4a24";
+    ctx.fillRect(x - 3 * s, footY - 16 * s, 6 * s, 16 * s);
+    ctx.fillStyle = dark ? "#276a34" : "#3f9a3c";
+    ctx.beginPath(); ctx.arc(x, footY - 24 * s, 15 * s, 0, 7); ctx.fill();
+    ctx.fillStyle = dark ? "#2f7a3e" : "#57b04b";
+    ctx.beginPath();
+    ctx.arc(x - 9 * s, footY - 19 * s, 11 * s, 0, 7);
+    ctx.arc(x + 9 * s, footY - 19 * s, 11 * s, 0, 7);
+    ctx.arc(x, footY - 31 * s, 12 * s, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.20)";
+    ctx.beginPath(); ctx.arc(x - 4 * s, footY - 31 * s, 5 * s, 0, 7); ctx.fill();
+  }
+  function mapBush(x, footY, s) {
+    mapShadow(x, footY, 16 * s);
+    ctx.fillStyle = "#3f9a3c";
+    ctx.beginPath();
+    ctx.arc(x - 9 * s, footY - 6 * s, 9 * s, 0, 7);
+    ctx.arc(x + 9 * s, footY - 6 * s, 9 * s, 0, 7);
+    ctx.arc(x, footY - 11 * s, 11 * s, 0, 7);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.18)";
+    ctx.beginPath(); ctx.arc(x - 3 * s, footY - 12 * s, 4 * s, 0, 7); ctx.fill();
+  }
+  function mapPalm(x, footY, s) {
+    mapShadow(x, footY, 15 * s);
+    ctx.strokeStyle = "#a9762f"; ctx.lineWidth = 5 * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x, footY); ctx.quadraticCurveTo(x - 6 * s, footY - 18 * s, x - 2 * s, footY - 30 * s); ctx.stroke();
+    const top = { x: x - 2 * s, y: footY - 30 * s };
+    ctx.fillStyle = "#3f9a3c";
+    for (const [dx, dy] of [[-18, -4], [-10, -12], [10, -12], [18, -4], [0, 6]]) {
+      ctx.beginPath();
+      ctx.ellipse(top.x + dx * s, top.y + dy * s, 12 * s, 5 * s, Math.atan2(dy, dx), 0, 7);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#7a4a24";
+    for (const dx of [-3, 3]) { ctx.beginPath(); ctx.arc(top.x + dx * s, top.y + 4 * s, 2.4 * s, 0, 7); ctx.fill(); }
+  }
+  function mapMountain(x, footY, s) {
+    mapShadow(x, footY, 26 * s);
+    ctx.fillStyle = "#8a8f9a";
+    ctx.beginPath(); ctx.moveTo(x - 30 * s, footY); ctx.lineTo(x, footY - 42 * s); ctx.lineTo(x + 30 * s, footY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#a7abb4";
+    ctx.beginPath(); ctx.moveTo(x, footY - 42 * s); ctx.lineTo(x + 30 * s, footY); ctx.lineTo(x + 8 * s, footY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff";  // neve
+    ctx.beginPath(); ctx.moveTo(x, footY - 42 * s); ctx.lineTo(x - 10 * s, footY - 26 * s); ctx.lineTo(x - 3 * s, footY - 30 * s); ctx.lineTo(x + 3 * s, footY - 26 * s); ctx.lineTo(x + 10 * s, footY - 28 * s); ctx.closePath(); ctx.fill();
+  }
+  function mapPond(x, y, s) {
+    ctx.fillStyle = "#e7d29a";  // margem de areia
+    ctx.beginPath(); ctx.ellipse(x, y, 34 * s, 20 * s, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#2f8fd6";
+    ctx.beginPath(); ctx.ellipse(x, y, 27 * s, 14 * s, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.35)";
+    ctx.beginPath(); ctx.ellipse(x - 8 * s, y - 4 * s, 8 * s, 3 * s, -0.4, 0, 7); ctx.fill();
+  }
+  function mapCastle(x, footY, s) {
+    mapShadow(x, footY, 26 * s);
+    const bw = 44 * s, bh = 34 * s, bx = x - bw / 2, by = footY - bh;
+    ctx.fillStyle = "#c9a26b"; ctx.fillRect(bx, by, bw, bh);           // corpo
+    for (const tx of [bx - 8 * s, bx + bw - 6 * s]) ctx.fillRect(tx, by - 16 * s, 14 * s, bh + 16 * s); // torres
+    ctx.fillStyle = "#b48a52";                                        // ameias
+    for (let i = 0; i < 5; i++) ctx.fillRect(bx + 2 * s + i * 9 * s, by - 6 * s, 5 * s, 6 * s);
+    ctx.fillStyle = "#6e4c22"; ctx.fillRect(x - 7 * s, by + 12 * s, 14 * s, bh - 12 * s); // portão
+    ctx.fillStyle = "#e63b2e";                                        // bandeirinhas
+    for (const tx of [bx - 1 * s, bx + bw + 5 * s]) {
+      ctx.fillRect(tx, by - 30 * s, 1.6 * s, 14 * s);
+      ctx.beginPath(); ctx.moveTo(tx + 1.6 * s, by - 30 * s); ctx.lineTo(tx + 11 * s, by - 26 * s); ctx.lineTo(tx + 1.6 * s, by - 22 * s); ctx.fill();
+    }
+  }
+  function mapBird(x, y, s) {
+    ctx.strokeStyle = "rgba(40,60,80,.55)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(x - 6 * s, y); ctx.quadraticCurveTo(x - 2 * s, y - 4 * s, x, y);
+    ctx.quadraticCurveTo(x + 2 * s, y - 4 * s, x + 6 * s, y); ctx.stroke();
+  }
+
   function drawMap() {
+    const T = performance.now() / 1000;
+    // --- oceano ---
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#7ec0ee"); g.addColorStop(1, "#bfe3a0");
+    g.addColorStop(0, "#2f7fc0"); g.addColorStop(1, "#57a9e6");
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#6fae54";
-    for (let i = 0; i < 5; i++) hillArc(i * 200 + 40, H - 30, 130, 70);
-    // caminho ligando os nós
-    ctx.strokeStyle = "#e9d7a0"; ctx.lineWidth = 9; ctx.lineCap = "round";
-    ctx.setLineDash([2, 14]);
+    // ondinhas animadas sobre o mar (cobertas depois pelo continente)
+    ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 10; c++) {
+      const x = 30 + c * 82 + (r % 2) * 40, y = 30 + r * 78, ph = Math.sin(T * 1.4 + r + c * 0.7) * 2;
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y); ctx.quadraticCurveTo(x - 4, y - 3 - ph, x, y);
+      ctx.quadraticCurveTo(x + 4, y + 3 + ph, x + 9, y); ctx.stroke();
+    }
+    // nuvens e aves decorando o mar (nas bordas)
+    ctx.fillStyle = "rgba(255,255,255,.8)";
+    cloud(40 + Math.sin(T * 0.3) * 6, 34); cloud(690 + Math.cos(T * 0.25) * 6, 30);
+    mapBird(120, 46, 1); mapBird(140, 52, 0.8); mapBird(700, 410, 1); mapBird(725, 418, 0.8);
+
+    // --- continente (praia + grama) ---
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,.25)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+    ctx.fillStyle = "#ecd79a"; mapBlob(400, 236, 366, 168, 0.045, 0.6); ctx.fill();   // areia/litoral
+    ctx.restore();
+    ctx.fillStyle = "#6fae54"; mapBlob(400, 236, 344, 150, 0.05, 0.6); ctx.fill();    // grama
+    ctx.fillStyle = "rgba(255,255,255,.08)"; mapBlob(400, 222, 320, 128, 0.05, 0.6); ctx.fill(); // luz no topo
+
+    // --- caminho ligando os nós (com contorno) ---
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(120,86,30,.55)"; ctx.lineWidth = 15;
+    ctx.beginPath(); ctx.moveTo(MAP_NODES[0].x, MAP_NODES[0].y);
+    for (let i = 1; i < MAP_NODES.length; i++) ctx.lineTo(MAP_NODES[i].x, MAP_NODES[i].y);
+    ctx.stroke();
+    ctx.strokeStyle = "#efdca6"; ctx.lineWidth = 10; ctx.stroke();
+    // trecho já concluído em tom mais quente
+    if (unlocked > 0) {
+      ctx.strokeStyle = "#ffcf5a"; ctx.lineWidth = 10;
+      ctx.beginPath(); ctx.moveTo(MAP_NODES[0].x, MAP_NODES[0].y);
+      for (let i = 1; i <= Math.min(unlocked, MAP_NODES.length - 1); i++) ctx.lineTo(MAP_NODES[i].x, MAP_NODES[i].y);
+      ctx.stroke();
+    }
+    // pontilhado central
+    ctx.strokeStyle = "rgba(150,110,40,.5)"; ctx.lineWidth = 2; ctx.setLineDash([2, 12]);
     ctx.beginPath(); ctx.moveTo(MAP_NODES[0].x, MAP_NODES[0].y);
     for (let i = 1; i < MAP_NODES.length; i++) ctx.lineTo(MAP_NODES[i].x, MAP_NODES[i].y);
     ctx.stroke(); ctx.setLineDash([]);
-    // nós
+
+    // --- decorações ---
+    for (const d of MAP_DECOR) {
+      if (d.t === "tree")   mapTree(d.x, d.y, d.s, false);
+      else if (d.t === "tree2") mapTree(d.x, d.y, d.s, true);
+      else if (d.t === "bush")  mapBush(d.x, d.y, d.s);
+      else if (d.t === "palm")  mapPalm(d.x, d.y, d.s);
+      else if (d.t === "mtn")   mapMountain(d.x, d.y, d.s);
+      else if (d.t === "pond")  mapPond(d.x, d.y, d.s);
+      else if (d.t === "castle")mapCastle(d.x, d.y, d.s);
+    }
+
+    // --- nós (medalhões das fases) ---
     for (let i = 0; i < MAP_NODES.length; i++) {
-      const n = MAP_NODES[i], open = i <= unlocked, sel = i === mapSel;
-      ctx.fillStyle = open ? (i < unlocked ? "#39c463" : WORLD_COLOR[n.world]) : "#8a8f9a";
-      ctx.strokeStyle = sel ? "#fff" : "rgba(0,0,0,.35)"; ctx.lineWidth = sel ? 4 : 2.5;
-      ctx.beginPath(); ctx.arc(n.x, n.y, 20, 0, 7); ctx.fill(); ctx.stroke();
+      const n = MAP_NODES[i], open = i <= unlocked, done = i < unlocked, cur = i === unlocked, sel = i === mapSel;
+      const R = 20;
+      // sombra
+      ctx.fillStyle = "rgba(0,0,0,.22)";
+      ctx.beginPath(); ctx.ellipse(n.x, n.y + R - 2, R * 0.9, R * 0.42, 0, 0, 7); ctx.fill();
+      // disco
+      ctx.fillStyle = done ? "#39c463" : (open ? WORLD_COLOR[n.world] : "#8a8f9a");
+      ctx.beginPath(); ctx.arc(n.x, n.y, R, 0, 7); ctx.fill();
+      // brilho superior
+      ctx.fillStyle = "rgba(255,255,255,.28)";
+      ctx.beginPath(); ctx.ellipse(n.x, n.y - R * 0.4, R * 0.62, R * 0.32, 0, 0, 7); ctx.fill();
+      // anel
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(n.x, n.y, R, 0, 7); ctx.stroke();
+      // fase atual: anel dourado pulsante
+      if (cur) {
+        const p = 2 + Math.sin(T * 4) * 1.5;
+        ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(n.x, n.y, R + 4 + p, 0, 7); ctx.stroke();
+      }
+      // rótulo
       ctx.fillStyle = open ? "#fff" : "#e8e8e8";
       ctx.font = "bold 16px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(open ? String(i + 1) : "🔒", n.x, n.y + 1);
-      if (i < unlocked) { ctx.font = "12px sans-serif"; ctx.fillStyle = "#0a5"; ctx.fillText("✓", n.x + 17, n.y - 15); }
+      if (done) {
+        ctx.fillStyle = "#0a5"; ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(n.x + 15, n.y - 15, 8, 0, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 11px sans-serif"; ctx.fillText("✓", n.x + 15, n.y - 14);
+      }
+      // seleção: contorno branco grosso
+      if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(n.x, n.y, R + 2, 0, 7); ctx.stroke(); }
     }
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
-    // personagem no nó selecionado
+
+    // --- personagem no nó selecionado (com pulinho) + seta ---
     const sn = MAP_NODES[mapSel];
-    if (CHARACTERS[chosen].ready) drawSprite(ctx, chosen, sn.x, sn.y - 20, 44, 1, tick * 0.05 % 6.28, false);
-    // título + instrução
-    const WORLD_NAME = ["🌳 Bosque", "🌴 Selva", "🏖️ Praia", "🏰 Castelo", "☁️ Céu"];
-    ctx.fillStyle = "rgba(0,0,0,.5)"; roundRect(W/2 - 170, 16, 340, 38, 10); ctx.fill();
+    const hop = Math.abs(Math.sin(T * 3)) * 6;
+    if (CHARACTERS[chosen].ready) drawSprite(ctx, chosen, sn.x, sn.y - 22 - hop, 44, 1, tick * 0.05 % 6.28, false);
+    ctx.fillStyle = "#ffd23f";
+    const ay = sn.y - 74 - hop;
+    ctx.beginPath(); ctx.moveTo(sn.x, ay + 8); ctx.lineTo(sn.x - 7, ay); ctx.lineTo(sn.x + 7, ay); ctx.closePath(); ctx.fill();
+
+    // --- título + instrução ---
+    ctx.fillStyle = "rgba(0,0,0,.5)"; roundRect(W / 2 - 176, 12, 352, 38, 10); ctx.fill();
     ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("🗺️ Fase " + (mapSel + 1) + "/15 · " + WORLD_NAME[MAP_NODES[mapSel].world], W/2, 35);
-    ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.92)";
-    ctx.fillText("← →  escolher fase   ·   ↑ / ▲  entrar", W/2, H - 18);
+    ctx.fillText("🗺️ Fase " + (mapSel + 1) + "/15 · " + WORLD_NAME[MAP_NODES[mapSel].world], W / 2, 31);
+    ctx.fillStyle = "rgba(0,0,0,.4)"; roundRect(W / 2 - 150, H - 34, 300, 26, 9); ctx.fill();
+    ctx.font = "14px sans-serif"; ctx.fillStyle = "rgba(255,255,255,.95)";
+    ctx.fillText("← →  escolher fase   ·   ↑ / ▲  entrar", W / 2, H - 20);
     ctx.textAlign = "start"; ctx.textBaseline = "alphabetic";
   }
 

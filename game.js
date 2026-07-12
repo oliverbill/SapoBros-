@@ -24,6 +24,9 @@
   const musicStart = () => { if (window.Sound) window.Sound.startMusic(); };
   const musicStop  = () => { if (window.Sound) window.Sound.stopMusic(); };
   const voice = (n) => { if (window.Sound && window.Sound.playVoice) window.Sound.playVoice(n); };
+  // Áudio do subterrâneo: música de terror + uivos de lobo
+  const caveAudioStart = () => { if (window.Sound) { window.Sound.stopMusic(); window.Sound.startHorror && window.Sound.startHorror(); window.Sound.startWolves && window.Sound.startWolves(); } };
+  const caveAudioStop  = () => { if (window.Sound) { window.Sound.stopHorror && window.Sound.stopHorror(); window.Sound.stopWolves && window.Sound.stopWolves(); } };
 
   // ---- Screens ----
   const startScreen = document.getElementById("startScreen");
@@ -338,7 +341,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     }
     respawnPlayer(false);
     cameraX = 0;
-    if (window.Sound && window.Sound.startWolves) window.Sound.startWolves();
+    caveAudioStart();
   }
 
   // resetPower=true zera para "small" (usado ao morrer/começar); senão mantém.
@@ -414,7 +417,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     startScreen.classList.add("hidden");
     msgScreen.classList.add("hidden");
     pauseScreen.classList.add("hidden");
-    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
+    caveAudioStop();
     musicStop();
     mapSel = Math.max(0, Math.min(sel ?? 0, unlocked));
     state = "map";
@@ -454,12 +457,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function togglePause() {
     if (state === "play") {
       state = "paused";
-      musicStop();
+      if (underground) caveAudioStop(); else musicStop();
       pauseScreen.classList.remove("hidden");
     } else if (state === "paused") {
       state = "play";
       pauseScreen.classList.add("hidden");
-      musicStart();
+      if (underground) caveAudioStart(); else musicStart();
     }
   }
 
@@ -468,7 +471,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (state !== "play" && state !== "paused" && state !== "map") return;
     saveProgress();
     musicStop();
-    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
+    caveAudioStop();
     state = "start";
     pauseScreen.classList.add("hidden");
     msgScreen.classList.add("hidden");
@@ -480,7 +483,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function enterPipe(pipe) {
     const retX = pipe.x + pipe.w/2 - player.w/2;
     const retY = pipe.y - player.h;
-    snd("pipe");
+    snd("suck");                        // som de cano sugando
     loadUnderground(levelIdx, retX, retY);
     state = "play";
     updateHUD();
@@ -488,8 +491,8 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
   // Sai do subterrâneo pelo cano de saída -> volta à fase de origem
   function exitUnderground() {
-    snd("pipe");
-    if (window.Sound && window.Sound.stopWolves) window.Sound.stopWolves();
+    snd("suck");
+    caveAudioStop();
     const ret = pipeReturn || { levelIdx: 0, x: 80, y: 320 };
     loadLevel(ret.levelIdx);
     player.x = ret.x; player.y = ret.y;

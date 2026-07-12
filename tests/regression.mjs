@@ -362,6 +362,11 @@ try {
     });
     check("entrar no cano abre o subterrâneo", inCave.underground === true && inCave.state === "play", JSON.stringify(inCave));
     check("subterrâneo tem morcegos voando", inCave.bats > 0, JSON.stringify(inCave));
+    const audio = await page.evaluate(() => ({
+      horror: typeof window.Sound.startHorror === "function" && typeof window.Sound.stopHorror === "function",
+      suck: (() => { try { window.Sound.play("suck"); return true; } catch (e) { return false; } })(),
+    }));
+    check("música de terror + som de sucção disponíveis", audio.horror && audio.suck, JSON.stringify(audio));
     await ctx.close();
   }
 

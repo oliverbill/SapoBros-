@@ -89,6 +89,26 @@ window.Sound = (() => {
     for (const n of notes) { if (n[0]) tone(n[0], n[1] * 0.92, type, t, vol); t += n[1] + gap; }
   }
 
+  // Rajada de ruído com filtro passa-banda varrendo (whoosh/sucção)
+  function whoosh(dur, f0, f1, vol) {
+    if (!ensure() || muted) return;
+    const t0 = ctx.currentTime + 0.01;
+    const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.Q.value = 1.4;
+    bp.frequency.setValueAtTime(f0, t0);
+    bp.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(bp); bp.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
+
   // ---- Efeitos (composições originais em estilo 8-bit) ----
   const SFX = {
     jump:       () => tone(300, 0.15, "square",   0, 0.3, 760),
@@ -104,6 +124,8 @@ window.Sound = (() => {
     gameover:   () => seq([[392,0.16],[311,0.16],[262,0.16],[196,0.45]], "triangle", 0.3),
     oneup:      () => seq([[784,0.08],[1047,0.08],[1319,0.08],[1568,0.18]], "square", 0.24),
     pipe:       () => seq([[520,0.06],[380,0.06],[280,0.08],[190,0.12]], "square", 0.28),
+    // sucção do cano: assobio subindo + whoosh de ruído + "slurp" descendo
+    suck:       () => { tone(140, 0.42, "sawtooth", 0, 0.20, 1300); tone(680, 0.34, "sine", 0.03, 0.14, 80); whoosh(0.42, 260, 2400, 0.26); },
   };
 
   function play(name) {
@@ -148,6 +170,43 @@ window.Sound = (() => {
   function stopMusic() {
     musicOn = false;
     if (timer) { clearInterval(timer); timer = null; }
+  }
+
+  // ---- Música de TERROR (subterrâneo) — composição original em menor/trítono ----
+  const HSTEP = 0.34;                 // lenta e arrastada
+  // melodia esparsa e sinistra (0 = pausa)
+  const HLEAD = [
+    440,0,0,415, 0,349,0,0, 311,0,0,330, 0,0,262,0,
+    440,0,0,466, 0,415,0,0, 311,0,0,0,   0,247,0,0
+  ];
+  // drone grave alternando raiz e trítono (tensão)
+  const HBASS = [
+    55,55,55,55, 77.8,77.8,77.8,77.8, 55,55,55,55, 82.4,82.4,77.8,77.8,
+    55,55,55,55, 73.4,73.4,73.4,73.4, 58.3,58.3,58.3,58.3, 82.4,82.4,77.8,77.8
+  ];
+  let horrorOn = false, hstep = 0, hnext = 0, htimer = null;
+  function horrorScheduler() {
+    if (!ctx) return;
+    while (hnext < ctx.currentTime + 0.2) {
+      const rel = hnext - ctx.currentTime;
+      const lf = HLEAD[hstep % HLEAD.length];
+      const bf = HBASS[hstep % HBASS.length];
+      if (lf) tone(lf, HSTEP * 1.4, "sawtooth", rel, 0.055);   // lead fino e baixo
+      if (bf) tone(bf, HSTEP * 1.9, "triangle", rel, 0.14);    // drone grave
+      // batida cardíaca ocasional (tensão)
+      if (hstep % 8 === 0) tone(48, 0.16, "sine", rel, 0.16);
+      hnext += HSTEP; hstep++;
+    }
+  }
+  function startHorror() {
+    if (muted || horrorOn || !ensure()) return;
+    horrorOn = true; hstep = 0;
+    hnext = ctx.currentTime + 0.05;
+    htimer = setInterval(horrorScheduler, 25);
+  }
+  function stopHorror() {
+    horrorOn = false;
+    if (htimer) { clearInterval(htimer); htimer = null; }
   }
 
   // ---- Uivo de lobo ao fundo (subterrâneo) — som sintetizado original ----
@@ -195,7 +254,7 @@ window.Sound = (() => {
   function setMuted(m) {
     muted = !!m;
     if (master) master.gain.value = muted ? 0 : 0.22;
-    if (muted) { stopMusic(); stopWolves(); }
+    if (muted) { stopMusic(); stopWolves(); stopHorror(); }
   }
 
   // Pré-decodifica as vozes já no carregamento (não depende de gesto):
@@ -205,7 +264,7 @@ window.Sound = (() => {
 
   return {
     play, playVoice, resume, startMusic, stopMusic, setMuted,
-    startWolves, stopWolves,
+    startWolves, stopWolves, startHorror, stopHorror,
     preloadVoices: loadVoices,
     isMuted: () => muted,
     isMusicOn: () => musicOn,

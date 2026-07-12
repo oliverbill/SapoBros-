@@ -189,6 +189,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   let fireballs = []; // {x,y,w,h,vx,vy,dead}
   let pipes = [];    // {x,y,w,h} canos gigantes (entrada p/ subterrâneo)
   let flag = null;   // {x,y,w,h}
+  let flagAnim = null;          // animação de descida no mastro ao fim da fase
   let exitPipe = null;          // cano de saída (no subterrâneo)
   let underground = false;      // cena subterrânea ativa?
   let pipeReturn = null;        // {levelIdx, x, y} para voltar do subterrâneo
@@ -267,7 +268,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   // Zera todas as listas de uma cena
   function clearScene() {
     solids = []; coins = []; enemies = []; particles = []; flag = null;
-    powerups = []; fireballs = []; pipes = []; exitPipe = null;
+    powerups = []; fireballs = []; pipes = []; exitPipe = null; flagAnim = null;
   }
 
   function loadLevel(idx) {
@@ -503,6 +504,47 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     musicStart();
   }
 
+  // Fim da fase: agarra o mastro e desliza até a base (estilo Mario)
+  function startFlagpole() {
+    const p = player;
+    const poleBase = flag.y + flag.h;
+    // bônus por altura do agarre (quanto mais alto, mais pontos)
+    const frac = Math.max(0, Math.min(1, (poleBase - (p.y + p.h)) / flag.h));
+    const bonus = Math.round(frac * 10) * 100;   // 0..1000
+    score += 500 + bonus;
+    updateHUD();
+    p.x = flag.x - p.w + 4;     // encosta no mastro
+    p.vx = 0; p.vy = 0; p.face = 1; p.walk = 0; p.invuln = 0;
+    flagAnim = { phase: "slide", t: 0, bannerY: Math.max(flag.y + 8, Math.min(p.y - 4, poleBase - 34)) };
+    musicStop();
+    snd("flag");
+  }
+
+  function updateFlagpole() {
+    const p = player;
+    const poleBase = flag.y + flag.h;
+    if (flagAnim.phase === "slide") {
+      p.y += 3.4;
+      flagAnim.bannerY = Math.max(flag.y + 8, Math.min(p.y - 4, poleBase - 34));
+      if (p.y + p.h >= poleBase) {
+        p.y = poleBase - p.h;
+        flagAnim.phase = "hop"; flagAnim.t = 0;
+        p.x = flag.x + 8; p.face = 1;      // pula para o outro lado do mastro
+        snd("stomp");
+      }
+    } else if (flagAnim.phase === "hop") {
+      flagAnim.t++;
+      p.x += 1.8; p.walk += 0.25;
+      p.vy += GRAVITY; p.y += p.vy;
+      for (const s of solids) { if (rectsOverlap(p, s) && p.vy > 0) { p.y = s.y - p.h; p.vy = 0; } }
+      if (flagAnim.t > 42) { flagAnim = null; completeLevel(); }
+    }
+    updateParticles();
+    const target = p.x + p.w/2 - W/2;
+    cameraX += (target - cameraX) * 0.12;
+    cameraX = Math.max(0, Math.min(cameraX, levelW - W));
+  }
+
   function completeLevel() {
     musicStop();
     snd("levelclear");
@@ -568,6 +610,8 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       if (p.deadT > 70) loseLife();
       return;
     }
+
+    if (flagAnim) { updateFlagpole(); return; }   // deslizando no mastro
 
     // Horizontal input
     if (keys.left)  { p.vx -= MOVE; p.face = -1; }
@@ -636,11 +680,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     updateParticles();
     for (const s of solids) if (s.bump > 0) s.bump--;   // animação da cabeçada no "?"
 
-    // Flag / goal
-    if (flag && rectsOverlap(p, flag)) {
-      score += 500;
-      updateHUD();
-      completeLevel();
+    // Encostou no mastro da bandeira -> inicia a descida
+    if (flag && !flagAnim && rectsOverlap(p, flag)) {
+      startFlagpole();
       return;
     }
 
@@ -1166,13 +1208,14 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     ctx.fillStyle = "#bbb"; ctx.fillRect(fx, flag.y, 2, flag.h);
     // ball on top
     ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(fx + 3, flag.y, 8, 0, 7); ctx.fill();
-    // waving flag
-    const t = performance.now() / 200;
+    // bandeira (desce junto com o jogador durante a animação)
+    const by = flagAnim ? flagAnim.bannerY : flag.y + 8;
+    const wave = flagAnim ? 0 : Math.sin(performance.now() / 200) * 3;
     ctx.fillStyle = "#e63b2e";
     ctx.beginPath();
-    ctx.moveTo(fx + 6, flag.y + 8);
-    ctx.lineTo(fx + 6 + 42, flag.y + 14 + Math.sin(t) * 3);
-    ctx.lineTo(fx + 6, flag.y + 30);
+    ctx.moveTo(fx + 6, by);
+    ctx.lineTo(fx + 6 + 42, by + 6 + wave);
+    ctx.lineTo(fx + 6, by + 22);
     ctx.closePath(); ctx.fill();
   }
 
@@ -1577,6 +1620,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       solids: () => solids,
       pipes: () => pipes,
       flag: () => flag,
+      get sliding() { return !!flagAnim; },
       get state() { return state; },
       get levelH() { return levelH; },
       get underground() { return underground; },

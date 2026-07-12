@@ -124,6 +124,8 @@ window.Sound = (() => {
     gameover:   () => seq([[392,0.16],[311,0.16],[262,0.16],[196,0.45]], "triangle", 0.3),
     oneup:      () => seq([[784,0.08],[1047,0.08],[1319,0.08],[1568,0.18]], "square", 0.24),
     pipe:       () => seq([[520,0.06],[380,0.06],[280,0.08],[190,0.12]], "square", 0.28),
+    flag:       () => tone(1100, 0.6, "square", 0, 0.22, 180),   // descida no mastro
+
     // sucção do cano: assobio subindo + whoosh de ruído + "slurp" descendo
     suck:       () => { tone(140, 0.42, "sawtooth", 0, 0.20, 1300); tone(680, 0.34, "sine", 0.03, 0.14, 80); whoosh(0.42, 260, 2400, 0.26); },
   };

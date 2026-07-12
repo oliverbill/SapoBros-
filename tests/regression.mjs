@@ -322,15 +322,32 @@ try {
     const onMap = await page.evaluate(() => ({ state: window.__DINO.state, unlocked: window.__DINO.unlocked }));
     check("novo jogo abre o mapa de fases", onMap.state === "map", JSON.stringify(onMap));
     check("apenas a 1ª fase começa desbloqueada", onMap.unlocked === 0, JSON.stringify(onMap));
-    // completar a fase 1 (tocar a bandeira) desbloqueia a 2
+    // completar a fase 1 (mastro) desbloqueia a 2
     await page.evaluate(() => window.__DINO.enterLevel(0)); await sleep(120);
     const done = await page.evaluate(async () => {
       const pl = window.__DINO.player, f = window.__DINO.flag();
-      pl.x = f.x - 4; pl.y = f.y + 10;      // teleporta sobre a bandeira
-      for (let i = 0; i < 30 && window.__DINO.state === "play"; i++) await new Promise(r => setTimeout(r, 30));
+      pl.x = f.x - 4; pl.y = f.y + 10;      // teleporta sobre o mastro
+      for (let i = 0; i < 120 && window.__DINO.state === "play"; i++) await new Promise(r => setTimeout(r, 30));
       return { state: window.__DINO.state, unlocked: window.__DINO.unlocked };
     });
     check("completar a fase desbloqueia a próxima", done.unlocked >= 1, JSON.stringify(done));
+    await ctx.close();
+  }
+
+  // ---------- 14b. Mastro da bandeira: desliza antes de concluir ----------
+  {
+    const { ctx, page } = await newGame();
+    await startPlay(page);
+    const slide = await page.evaluate(async () => {
+      const pl = window.__DINO.player, f = window.__DINO.flag();
+      pl.x = f.x - 4; pl.y = f.y + 4;                 // encosta no topo do mastro
+      await new Promise(r => setTimeout(r, 120));
+      const y0 = pl.y, sliding = window.__DINO.sliding, st = window.__DINO.state;
+      await new Promise(r => setTimeout(r, 250));
+      return { sliding, st, y0, y1: pl.y, base: f.y + f.h - pl.h };
+    });
+    check("agarra o mastro (não conclui na hora)", slide.sliding === true && slide.st === "play", JSON.stringify(slide));
+    check("desliza para baixo pelo mastro", slide.y1 > slide.y0, `y ${slide.y0.toFixed(0)}→${slide.y1.toFixed(0)}`);
     await ctx.close();
   }
 

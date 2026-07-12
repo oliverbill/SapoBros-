@@ -390,6 +390,8 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   let exitPipe = null;          // cano de saída (no subterrâneo)
   let underground = false;      // cena subterrânea ativa?
   let pipeReturn = null;        // {levelIdx, x, y} para voltar do subterrâneo
+  let enemyShots = [];          // projéteis dos inimigos atiradores
+  let _enemyIdx = 0;            // contador p/ variar o tipo de inimigo na fase
   let boss = null;              // chefão da arena (um por estágio de chefão)
   let bossShots = [];           // projéteis do chefão {type,x,y,w,h,vx,vy,g,...}
   let lavas = [];               // poças de lava (mortais) na arena de chefão
@@ -473,6 +475,27 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     solids = []; coins = []; enemies = []; particles = []; flag = null;
     powerups = []; fireballs = []; pipes = []; exitPipe = null; flagAnim = null;
     boss = null; bossShots = []; lavas = []; spikes = []; bossStage = false;
+    enemyShots = [];   // _enemyIdx acumula entre fases p/ variar melhor os tipos
+  }
+
+  // Cria um inimigo com tipo/velocidade conforme a dificuldade da fase.
+  // O elenco cresce por mundo: andarilho → pulador → atirador → voador → espinho.
+  function makeEnemy(x, y, stageIdx) {
+    const w = worldOf(stageIdx);
+    const pool = ["walker"];
+    if (w >= 1) pool.push("jumper");
+    if (w >= 2) pool.push("shooter");
+    if (w >= 3) pool.push("flyer");
+    if (w >= 4) pool.push("spiker");
+    const type = pool[_enemyIdx++ % pool.length];
+    const mul = 1 + stageIdx * 0.03;                 // fica mais rápido a cada fase
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const base = { x:x+4, y:y+6, w:32, h:32, alive:true, squash:0, t:(_enemyIdx*17) % 60, type };
+    if (type === "jumper")  return { ...base, w:30, h:30, vx:dir*0.8*mul, jump:true, jumpEvery: Math.max(60, 120 - stageIdx*3) };
+    if (type === "shooter") return { ...base, vx:dir*0.5*mul, shoot:true, shootEvery: Math.max(60, 150 - stageIdx*5), shotSpeed: 3 + stageIdx*0.14, scd: 70 };
+    if (type === "flyer")   return { ...base, w:30, h:26, y:y+6 - TILE*2, baseY:y+6 - TILE*2, vx:dir*1.3*mul, vy:0, fly:true, ph:Math.random()*6.28, amp:24 };
+    if (type === "spiker")  return { ...base, w:32, h:30, vx:dir*0.8*mul, spiky:true };
+    return { ...base, vx:dir*0.9*mul };              // walker
   }
 
   function loadLevel(idx) {
@@ -494,7 +517,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         } else if (ch === "?") {
           coins.push({ x:x+10, y:y+8, w:20, h:24, taken:false, phase:Math.random()*6.28 });
         } else if (ch === "E") {
-          enemies.push({ x:x+4, y:y+6, w:32, h:32, vx:-0.9, alive:true, squash:0, type:"beetle" });
+          enemies.push(makeEnemy(x, y, idx));
         } else if (ch === "M") { spawnPowerup("mushroom", x, y);
         } else if (ch === "R") { spawnPowerup("fire", x, y);
         } else if (ch === "V") { spawnPowerup("fly", x, y);
@@ -559,7 +582,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
           coins.push({ x:x+10, y:y+8, w:20, h:24, taken:false, phase:Math.random()*6.28 });
         } else if (ch === "b") {
           // morcego (voa em padrão senoidal)
-          enemies.push({ x:x+4, y:y+6, w:30, h:24, vx:(Math.random()<.5?-1:1)*1.3, vy:0, baseY:y+6, alive:true, squash:0, type:"bat", ph:Math.random()*6.28 });
+          enemies.push({ x:x+4, y:y+6, w:30, h:24, vx:(Math.random()<.5?-1:1)*1.3, vy:0, baseY:y+6, alive:true, squash:0, type:"bat", fly:true, amp:26, ph:Math.random()*6.28 });
         } else if (ch === "X") {
           exitPipe = { x, y:y - TILE, w:TILE, h:TILE*2 };       // cano de saída
           solids.push({ x, y:y - TILE, w:TILE, h:TILE*2, type:"pipe" });
@@ -911,6 +934,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (p.y > levelH + 60) killPlayer();
 
     updateEnemies();
+    updateEnemyShots();
     if (bossStage) { updateBoss(); updateBossShots(); checkHazards(); }
     updateCoins();
     updatePowerups();
@@ -980,36 +1004,25 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   }
 
   function updateEnemies() {
-    const p = player;
+    const p = player, pcx = p.x + p.w/2;
     for (const e of enemies) {
       if (!e.alive) { e.squash = Math.max(0, e.squash - 1); continue; }
+      e.t = (e.t || 0) + 1;
 
-      if (e.type === "bat") {
-        // Morcego: voa em padrão senoidal, sem gravidade, vira nas paredes
-        e.ph += 0.08;
+      if (e.fly) {
+        // Voadores (morcego/inseto): padrão senoidal, sem gravidade, viram nas paredes
+        e.ph = (e.ph || 0) + 0.08;
         e.x += e.vx;
-        for (const s of solids) {
-          if (rectsOverlap(e, s)) {
-            if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w;
-            e.vx *= -1;
-          }
-        }
-        e.y = e.baseY + Math.sin(e.ph) * 26;
+        for (const s of solids) if (rectsOverlap(e, s)) { if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w; e.vx *= -1; }
+        e.y = e.baseY + Math.sin(e.ph) * (e.amp || 26);
         if (e.x < TILE) { e.x = TILE; e.vx = Math.abs(e.vx); }
         if (e.x + e.w > levelW - TILE) { e.x = levelW - TILE - e.w; e.vx = -Math.abs(e.vx); }
       } else {
         // Patrol with gravity
         e.vy = (e.vy || 0) + GRAVITY;
         if (e.vy > 14) e.vy = 14;
-
         e.x += e.vx;
-        // turn at walls
-        for (const s of solids) {
-          if (rectsOverlap(e, s)) {
-            if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w;
-            e.vx *= -1;
-          }
-        }
+        for (const s of solids) if (rectsOverlap(e, s)) { if (e.vx > 0) e.x = s.x - e.w; else e.x = s.x + s.w; e.vx *= -1; }
         e.y += e.vy;
         let grounded = false;
         for (const s of solids) {
@@ -1018,46 +1031,57 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
             else { e.y = s.y + s.h; e.vy = 0; }
           }
         }
-        // turn at ledges (avoid walking off edges)
-        if (grounded) {
-          const aheadX = e.vx > 0 ? e.x + e.w + 2 : e.x - 2;
-          const footY = e.y + e.h + 4;
-          let floor = false;
-          for (const s of solids) {
-            if (aheadX >= s.x && aheadX <= s.x + s.w && footY >= s.y && footY <= s.y + s.h) { floor = true; break; }
-          }
-          if (!floor) e.vx *= -1;
+        e.grounded = grounded;
+        // pulador: salta de tempos em tempos (em direção ao jogador)
+        if (e.jump && grounded && e.t % (e.jumpEvery || 100) === 0) {
+          e.vy = -9.5; e.vx = Math.abs(e.vx || 0.8) * (pcx < e.x + e.w/2 ? -1 : 1);
         }
-        // fell off world
+        // vira nas beiras (só quando no chão e sem pulo pendente)
+        if (grounded && e.vy === 0) {
+          const aheadX = e.vx > 0 ? e.x + e.w + 2 : e.x - 2, footY = e.y + e.h + 4;
+          let floor = false;
+          for (const s of solids) if (aheadX >= s.x && aheadX <= s.x + s.w && footY >= s.y && footY <= s.y + s.h) { floor = true; break; }
+          if (!floor && e.vx) e.vx *= -1;
+        }
         if (e.y > levelH + 80) e.alive = false;
       }
 
-      // Collision with player
+      // atirador: dispara um projétil em direção ao jogador
+      if (e.shoot) {
+        e.scd = (e.scd || 0) - 1;
+        if (e.scd <= 0 && Math.abs(pcx - (e.x + e.w/2)) < 360) { shootEnemy(e); e.scd = e.shootEvery || 120; }
+      }
+
+      // Colisão com o jogador
       if (rectsOverlap(p, e) && !p.dead) {
         const stomping = p.vy > 0 && (p.y + p.h) - e.y < 20;
-        if (stomping) {
+        if (stomping && !e.spiky) {
           e.alive = false; e.squash = 16;
           p.vy = JUMP_VY * 0.62;
           score += 100; updateHUD();
           spawnPop(e.x + e.w/2, e.y + e.h/2);
           snd("stomp");
-        } else if (p.invuln <= 0 && !invincible) {
-          // voz do Minja ao se encrencar (esbarrar/levar dano de um inimigo)
-          if (chosen === 1) voice("minja_trouble");
-          if (p.power !== "small") {
-            // perde o poder em vez de morrer (estilo Mario)
-            setPower("small");
-            p.invuln = 100;
-            p.vy = -6;
-            spawnSpark(p.x + p.w/2, p.y + p.h/2);
-            updateHUD();
-            snd("powerdown");
-          } else {
-            killPlayer();
-          }
+        } else {
+          damagePlayer();     // espinho (não pisável) ou toque comum
         }
       }
     }
+  }
+
+  // Projétil de inimigo atirador (dano ao jogador; some em parede/limite)
+  function shootEnemy(e) {
+    const ox = e.x + e.w/2, dir = player.x + player.w/2 < ox ? -1 : 1;
+    enemyShots.push({ x:ox - 7, y:e.y + e.h*0.3, w:14, h:14, vx:dir * (e.shotSpeed || 3), vy:-1, t:0 });
+    snd("shoot");
+  }
+  function updateEnemyShots() {
+    for (const s of enemyShots) {
+      s.t++; s.vy += 0.18; s.x += s.vx; s.y += s.vy;
+      for (const so of solids) if (rectsOverlap(s, so)) { s.dead = true; break; }
+      if (s.x < -30 || s.x > levelW + 30 || s.y > levelH + 40) s.dead = true;
+      if (!s.dead && !player.dead && rectsOverlap(player, s)) { s.dead = true; damagePlayer(); }
+    }
+    enemyShots = enemyShots.filter(s => !s.dead);
   }
 
   // ============================================================
@@ -1985,9 +2009,63 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         }
         continue;
       }
-      if (e.type === "bat") drawBat(ex, e.y, e.w, e.h);
+      if (e.type === "bat")          drawBat(ex, e.y, e.w, e.h);
+      else if (e.type === "jumper")  drawJumper(ex, e.y, e.w, e.h, e);
+      else if (e.type === "shooter") drawShooter(ex, e.y, e.w, e.h, e);
+      else if (e.type === "flyer")   drawFlyer(ex, e.y, e.w, e.h, e);
+      else if (e.type === "spiker")  drawSpiker(ex, e.y, e.w, e.h);
       else drawEnemy(ex, e.y, e.w, e.h, e.vx);
     }
+  }
+
+  // Projéteis dos inimigos atiradores (bolha de energia)
+  function drawEnemyShots() {
+    for (const s of enemyShots) {
+      const cx = s.x - cameraX + s.w/2, cy = s.y + s.h/2;
+      if (cx < -20 || cx > W + 20) continue;
+      ctx.fillStyle = "#c07bff"; ctx.beginPath(); ctx.ellipse(cx, cy, s.w/2, s.h/2, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#f0d6ff"; ctx.beginPath(); ctx.arc(cx - 2, cy - 2, 2.2, 0, 7); ctx.fill();
+    }
+  }
+  // Pulador: sapinho saltitante de patas grandes
+  function drawJumper(x, y, w, h, e) {
+    const cx = x + w/2, by = y + h, air = e && !e.grounded;
+    ctx.fillStyle = "#3fae4a";
+    ctx.beginPath(); ctx.ellipse(cx, by - h*0.34, w*0.46, h*0.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#2f8a3a";   // patas
+    ctx.fillRect(cx - w*0.42, by - (air ? 12 : 6), 9, air ? 12 : 6);
+    ctx.fillRect(cx + w*0.42 - 9, by - (air ? 12 : 6), 9, air ? 12 : 6);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - 6, by - h*0.5, 5, 0, 7); ctx.arc(cx + 6, by - h*0.5, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 6, by - h*0.5, 2.5, 0, 7); ctx.arc(cx + 6, by - h*0.5, 2.5, 0, 7); ctx.fill();
+  }
+  // Atirador: criatura-tromba que cospe bolhas
+  function drawShooter(x, y, w, h, e) {
+    const cx = x + w/2, by = y + h, dir = (e && e.vx < 0) ? -1 : 1;
+    ctx.fillStyle = "#7a3fb0";
+    ctx.beginPath(); ctx.ellipse(cx, by - h*0.36, w*0.48, h*0.4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#5c2e88"; ctx.fillRect(cx + dir*w*0.2, by - h*0.5, dir*w*0.34, 8);  // tromba
+    ctx.fillStyle = "#3a1c58";
+    const fp = Math.sin(performance.now()/100) * 2;
+    ctx.fillRect(cx - 12, by - 5 + fp, 7, 6); ctx.fillRect(cx + 5, by - 5 - fp, 7, 6);
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - 5, by - h*0.46, 5, 0, 7); ctx.arc(cx + 7, by - h*0.46, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 5 + dir, by - h*0.46, 2.4, 0, 7); ctx.arc(cx + 7 + dir, by - h*0.46, 2.4, 0, 7); ctx.fill();
+  }
+  // Voador de superfície: inseto de asas amarelas
+  function drawFlyer(x, y, w, h) {
+    const cx = x + w/2, cy = y + h/2, flap = Math.sin(performance.now()/70) * 0.6;
+    ctx.fillStyle = "rgba(255,235,120,.9)";
+    for (const sgn of [-1, 1]) { ctx.save(); ctx.translate(cx, cy); ctx.scale(sgn, 1); ctx.rotate(-0.2 + flap); ctx.beginPath(); ctx.ellipse(w*0.4, 0, w*0.4, h*0.28, 0, 0, 7); ctx.fill(); ctx.restore(); }
+    ctx.fillStyle = "#c99a2e"; ctx.beginPath(); ctx.ellipse(cx, cy, w*0.28, h*0.34, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 4, cy - 2, 2.2, 0, 7); ctx.arc(cx + 4, cy - 2, 2.2, 0, 7); ctx.fill();
+  }
+  // Espinho: ouriço que não pode ser pisado
+  function drawSpiker(x, y, w, h) {
+    const cx = x + w/2, by = y + h;
+    ctx.fillStyle = "#37506b";
+    for (let i = 0; i < 8; i++) { const a = Math.PI + (i/7)*Math.PI, sx = cx + Math.cos(a)*w*0.5, sy = by - h*0.42 + Math.sin(a)*h*0.42; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a)*w*0.34, by - h*0.42 + Math.sin(a)*h*0.3); ctx.lineTo(sx, sy); ctx.lineTo(cx + Math.cos(a + 0.2)*w*0.34, by - h*0.42 + Math.sin(a + 0.2)*h*0.3); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = "#48688a"; ctx.beginPath(); ctx.ellipse(cx, by - h*0.34, w*0.4, h*0.34, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx - 6, by - h*0.36, 4.5, 0, 7); ctx.arc(cx + 6, by - h*0.36, 4.5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 6, by - h*0.36, 2.2, 0, 7); ctx.arc(cx + 6, by - h*0.36, 2.2, 0, 7); ctx.fill();
   }
 
   // Morcego: corpo escuro, asas batendo, olhinhos vermelhos
@@ -2119,6 +2197,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     drawPowerups();
     drawFlag();
     drawEnemies();
+    drawEnemyShots();
     if (bossStage) { drawBoss(); drawBossShots(); }
     drawFireballs();
     drawParticles();
@@ -2584,6 +2663,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       solids: () => solids,
       pipes: () => pipes,
       flag: () => flag,
+      enemyShots: () => enemyShots,
       boss: () => boss,
       bossShots: () => bossShots,
       lavas: () => lavas,

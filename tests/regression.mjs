@@ -544,6 +544,78 @@ try {
     await ctx.close();
   }
 
+  // ---------- 20. Inimigos variados, com pulo/tiro e dificuldade crescente ----------
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#startBtn"); await sleep(120);
+    // varre as fases normais e coleta os tipos de inimigo e a velocidade média
+    const survey = await page.evaluate(async () => {
+      const kinds = {}, byWorld = {};
+      let speedEarly = 0, nEarly = 0, speedLate = 0, nLate = 0;
+      for (let i = 0; i < 20; i++) {
+        if (i % 4 === 3) continue;                 // pula arenas de chefão
+        window.__DINO.enterLevel(i);
+        await new Promise(r => setTimeout(r, 20));
+        const es = window.__DINO.enemies();
+        const w = Math.floor(i / 4);
+        byWorld[w] = byWorld[w] || new Set();
+        for (const e of es) {
+          kinds[e.type] = (kinds[e.type] || 0) + 1;
+          byWorld[w].add(e.type);
+          const sp = Math.abs(e.vx || 0);
+          if (i < 3) { speedEarly += sp; nEarly++; } if (i >= 16) { speedLate += sp; nLate++; }
+        }
+      }
+      return {
+        kinds, world0: [...(byWorld[0]||[])], world4: [...(byWorld[4]||[])],
+        avgEarly: nEarly ? speedEarly / nEarly : 0, avgLate: nLate ? speedLate / nLate : 0,
+      };
+    });
+    check("há vários tipos de inimigo pelas fases", Object.keys(survey.kinds).length >= 4, JSON.stringify(survey.kinds));
+    check("mundo 1 só tem andarilhos (fácil)", survey.world0.length === 1 && survey.world0[0] === "walker", JSON.stringify(survey.world0));
+    check("mundo 5 traz tipos avançados (atirador/voador/espinho)",
+      ["shooter", "flyer", "spiker"].some(t => survey.world4.includes(t)), JSON.stringify(survey.world4));
+    check("inimigos ficam mais rápidos no fim", survey.avgLate > survey.avgEarly, JSON.stringify({ e: survey.avgEarly, l: survey.avgLate }));
+
+    // atirador dispara um projétil que causa dano ao jogador
+    const shots = await page.evaluate(async () => {
+      // procura uma fase com atirador
+      let found = -1;
+      for (let i = 8; i < 20 && found < 0; i++) {
+        if (i % 4 === 3) continue;
+        window.__DINO.enterLevel(i);
+        await new Promise(r => setTimeout(r, 20));
+        if (window.__DINO.enemies().some(e => e.type === "shooter")) found = i;
+      }
+      if (found < 0) return { found };
+      // posiciona o jogador perto de um atirador (dentro do alcance) e espera disparar
+      const sp = window.__DINO.enemies().find(e => e.type === "shooter");
+      const pl = window.__DINO.player; pl.x = sp.x - 90; pl.y = sp.y;
+      let maxShots = 0;
+      for (let k = 0; k < 80; k++) { await new Promise(r => setTimeout(r, 30)); const pl2 = window.__DINO.player; const s2 = window.__DINO.enemies().find(e => e.type === "shooter"); if (s2) pl2.x = s2.x - 90; maxShots = Math.max(maxShots, window.__DINO.enemyShots().length); }
+      return { found, maxShots };
+    });
+    check("existe fase com inimigo atirador", shots.found >= 0, JSON.stringify(shots));
+    check("o atirador dispara projéteis", (shots.maxShots || 0) > 0, JSON.stringify(shots));
+
+    // pisar num espinho NÃO o mata (e machuca o jogador)
+    const spikeHit = await page.evaluate(async () => {
+      let lvl = -1;
+      for (let i = 0; i < 20 && lvl < 0; i++) { if (i % 4 === 3) continue; window.__DINO.enterLevel(i); await new Promise(r => setTimeout(r, 20)); if (window.__DINO.enemies().some(e => e.type === "spiker")) lvl = i; }
+      if (lvl < 0) return { lvl };
+      const pl = window.__DINO.player; window.__DINO.give("mushroom"); // fica grande p/ perder poder em vez de morrer
+      await new Promise(r => setTimeout(r, 20));
+      const sp = window.__DINO.enemies().find(e => e.type === "spiker");
+      const pw0 = pl.power;
+      pl.x = sp.x + (sp.w - pl.w) / 2; pl.y = sp.y - pl.h - 2; pl.vy = 4;   // cai em cima
+      await new Promise(r => setTimeout(r, 120));
+      return { lvl, alive: sp.alive, pw0, pw1: pl.power };
+    });
+    check("espinho não pode ser pisado (continua vivo)", spikeHit.alive === true, JSON.stringify(spikeHit));
+    check("pisar no espinho machuca o jogador", spikeHit.pw1 !== spikeHit.pw0, JSON.stringify(spikeHit));
+    await ctx.close();
+  }
+
   // O Chromium headless (CI) não decodifica AAC/m4a — as vozes tocam no Safari.
   // Ignoramos só erros de codec de áudio; qualquer outro reprova o teste.
   const realErrors = pageErrors.filter((e) => !/decode audio data|no supported source|supported sources|NotSupportedError|failed to load because/i.test(e));

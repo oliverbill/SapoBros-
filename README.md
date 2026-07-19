@@ -9,7 +9,7 @@ personagem tem uma **voz** própria que toca ao pegar um cogumelo ou flor.
 
 ## 🎮 Jogar agora
 
-**https://oliverbill.github.io/SapoBros-/**
+**https://oliverbill.github.io/sapobros-mario-game/**
 
 Abra no navegador (no iPhone, use o **Safari** e toque em *Compartilhar →
 Adicionar à Tela de Início* para instalar como app em tela cheia).

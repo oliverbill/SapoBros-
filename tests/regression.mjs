@@ -469,6 +469,46 @@ try {
     await ctx.close();
   }
 
+  // ---------- 17b. Cada bloco "?" declarado é colocado E responde à cabeçada ----------
+  // (Bug já visto: um "?" caía em cima de um tijolo — aparecia na tela, mas
+  //  a colisão do tijolo vencia antes e a cabeçada não disparava nada.)
+  {
+    const { ctx, page } = await newGame();
+    await page.click("#startBtn"); await sleep(120);
+    const r = await page.evaluate(async () => {
+      const QBLOCKS = [
+        [ {col:6,row:6,item:"mushroom"},{col:20,row:6,item:"star"},{col:37,row:6,item:"fire"},{col:27,row:6,item:"egg"} ],
+        [ {col:11,row:5,item:"mushroom"},{col:22,row:5,item:"star"},{col:39,row:5,item:"fly"}, {col:16,row:5,item:"egg"} ],
+        [ {col:6,row:5,item:"mushroom"}, {col:21,row:5,item:"star"},{col:37,row:5,item:"fire"},{col:15,row:5,item:"egg"} ],
+      ]; // amostra: primeiras 3 fases normais (representam todos os padrões de layout)
+      const T = 40;
+      const missing = [], dead = [];
+      for (let ti = 0; ti < QBLOCKS.length; ti++) {
+        const lvl = ti;                                // 0..2 são as fases 1..3 (não-chefão)
+        window.__DINO.enterLevel(lvl);
+        await new Promise(r => setTimeout(r, 25));
+        const solids = window.__DINO.solids();
+        for (const q of QBLOCKS[ti]) {
+          const bx = q.col * T, by = q.row * T;
+          const at = solids.find(s => s.type === "question" && s.x === bx && s.y === by);
+          if (!at) { missing.push(`L${lvl} (${q.col},${q.row})`); continue; }
+          // Simula uma cabeçada: reposiciona jogador embaixo do bloco e força vy < 0.
+          const before = at.used;
+          window.__DINO.player.x = bx + 4;
+          window.__DINO.player.y = by + T + 4;
+          window.__DINO.player.vy = -8;
+          await new Promise(r => setTimeout(r, 40));    // deixa a física rodar
+          const after = window.__DINO.solids().find(s => s.type === "question" && s.x === bx && s.y === by);
+          if (!after || !after.used) dead.push(`L${lvl} (${q.col},${q.row})`);
+        }
+      }
+      return { missing, dead };
+    });
+    check("todo bloco ? declarado é realmente colocado", r.missing.length === 0, r.missing.join("; "));
+    check("todo bloco ? responde à cabeçada (não fica inerte)", r.dead.length === 0, r.dead.join("; "));
+    await ctx.close();
+  }
+
   // ---------- 18. 20 estágios carregáveis (15 fases c/ bandeira + 5 chefões) ----------
   {
     const { ctx, page } = await newGame();

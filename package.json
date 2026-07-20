@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/regression.mjs"
+    "test": "node tests/qblocks.mjs && node tests/regression.mjs",
+    "test:qblocks": "node tests/qblocks.mjs"
   },
   "devDependencies": {
     "playwright": "^1.48.0"

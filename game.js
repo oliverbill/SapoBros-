@@ -21,7 +21,12 @@
 
   // Atalhos de áudio (tolerantes à ausência do motor de som)
   const snd = (n) => { if (window.Sound) window.Sound.play(n); };
-  const musicStart = () => { if (window.Sound) window.Sound.startMusic(); };
+  // Escolhe a faixa: arena de chefao toca Castle Theme; demais tocam Ground Theme.
+  const musicStart = () => {
+    if (!window.Sound) return;
+    if (stageIsBoss(levelIdx) && window.Sound.startCastleMusic) window.Sound.startCastleMusic();
+    else window.Sound.startMusic();
+  };
   const musicStop  = () => { if (window.Sound) window.Sound.stopMusic(); };
   const voice = (n) => { if (window.Sound && window.Sound.playVoice) window.Sound.playVoice(n); };
   // Áudio do subterrâneo: música de terror + uivos de lobo
@@ -111,18 +116,18 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 .................?.?.?..........................................................
 ..............................BBB...............?...?...........................
-.........?...................................BBBBB..............................
-......BBBB.........E...............BB..............................F.............
+.........?...................................BBB.B..............................
+......BBB..........E...............BB..............................F.............
 ...........................?..............E...............BBB.....G.............
 ..P.....E..........BBB.........E.......?.......E....?.....E.......G..............
 GGGGGGGGGGGGGGGGGG....GGGGGGGGGGGGGGG..GGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGG`,
 
 `................................................................................
 .............?..?..?..?.........................................................
-............BBBBBBB...................?.?.?.....................................
-......................................BBBBB.....................................
+............B.BB.BB...................?.?.?.....................................
+.......................................B.B......................................
 ....?...............E.....E.......................E.....E.......F...............
-...BB......?.................B............?.?.........BBBB......G................
+...B.......?.................B............?.?.........BBBB......G................
 .........B..B.....................E..............B.............G................
 ..P..E..........BB.....?.....E..........BB..E.........?...E....G................
 GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`,
@@ -131,7 +136,7 @@ GGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 ............???...........????..............???.................................
-............BBB....???....BBBB..................................................
+...................???..........................................................
 .....................................???........................................
 .............................BBB................................................
 ..P..................................................E...E................F.....
@@ -140,10 +145,10 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 .................................?????..........................................
-.................................BBBBB..................?????...................
+........................................................?????...................
 ................BBB............BBBB..............????...........................
 ..................................................???...........................
-....................................................B...........................
+................................................................................
 ..P...........E..E................E.......................................F.....
 GGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG..GGGGGGG...GGGGGGGGGGGGGGGGGG`,
 `................................................................................
@@ -152,15 +157,15 @@ GGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG..GGGGGGG...GGGGGGGGGGGGGGGGGG
 ................................................................................
 ..............................???.............................BBBB..............
 ...........................BB..............????...............?????.............
-...........................................BBB...........???..BB???.............
-................................................................BBB.............
+.........................................................???....???.............
+................................................................................
 ..P................E..........E............E..............................F.....
 GGGGGGGGGGGGGGG...GGGGGG...GGGGGGGGGGGGGG..GGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG`,
 `................................................................................
 ................................................................................
 ................................................................................
 ....................???.....???.................................................
-....................BBB.........???.............................................
+................................???.............................................
 ....................BBB.....???.................................................
 ........................???....???................???......BBB..................
 ................................................................................
@@ -172,25 +177,25 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ..............???..........................................???..................
 ..............................................???....?????......................
-.........................????.......???...........???B...B......................
-.........................BB.........BBB...........BBB...........................
+.........................????.......???...........???...........................
+................................................................................
 ..P...................E..........E..............E.........................F.....
 GGGGGGGGGGGGG...GGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGG`,
 `................................................................................
 ................................................................................
 ................................................................................
 ............................................???..????...........................
-..............................???....?????..BBB..BBBB...........................
-...........................???.......BBB........................................
+..............................???....?????......................................
+...........................???..................................................
 ...........????.....???..........................BBBB...........................
-...........BBBB.................................................................
+................................................................................
 ..P.....................E...........E..E..................................F.....
 GGGGGGGGGGGGGGGGGGGG...GGGGGGG..GGGGGGGG...GGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGG`,
 `................................................................................
 ................................................................................
 ................................................................................
 ........................?????.....??????........................................
-........................BBBBB.???...............................................
+..............................???...............................................
 .................................................BBBBB..???...???...............
 ................................................................................
 ..............BBBB..............................................................
@@ -200,9 +205,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 ....................................???......???????............................
-.............???.............................BBBBB..........???.................
+.............???............................................???.................
 .................................????.................BBBB......................
-.............................BBBB..BB...........................................
+.............................BBBB...............................................
 ................................................................................
 ..P.................E.....................E.......E.......................F.....
 GGGGGGGGGGGGGGGGGGGGGGG..GGGGGGGG..GGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGG`,
@@ -210,8 +215,8 @@ GGGGGGGGGGGGGGGGGGGGGGG..GGGGGGGG..GGGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 ...........?????.????...................................???.....................
-...........BBB????BB..............????.???......................................
-..............BBBB................BB............................................
+..............????................????.???......................................
+................................................................................
 .................................................???............................
 ................................................................................
 ..P...........................E..........E...............E................F.....
@@ -231,8 +236,8 @@ GGGGGGGGGGGGGGG..GGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 ...............????..................???........................................
-............???BB...............................................................
-............BBB.....???..............BBB.......???.....???.???..................
+............???.................................................................
+....................???..............BBB.......???.....???.???..................
 .......................BBB......................................................
 ..P.............E.......................................E..E..............F.....
 GGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGG..GGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG`,
@@ -240,10 +245,10 @@ GGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGG..GGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG
 ................................................................................
 ................................................................................
 .........................???.........???.............???........................
-...............????...................???............BBB........................
-..................B..............?BBBBB..................B......................
+...............????...................???.......................................
+.................................?BBBB...................B......................
 .................................???...............????.........................
-...................................................BBBB.........................
+................................................................................
 ..P................E...E.....................E...........E................F.....
 GGGGGGGGGGGGGGG...GGGGGGGGGGGGG...GGGGGGG..GGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGG`,
   ];
@@ -270,7 +275,11 @@ GGGGGGGGGGGGGGG...GGGGGGGGGGGGG...GGGGGGG..GGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGG
   function spawnPowerup(type, x, y) {
     if (type === "mushroom")
       powerups.push({ x:x+6, y:y+8, w:28, h:28, type:"mushroom", vx:1.1, vy:0, taken:false, phase:0 });
+    else if (type === "egg")
+      // ovo de avestruz: fica parado até ser tocado; chocando quando coletado
+      powerups.push({ x:x+8, y:y+8, w:24, h:28, type:"egg", vx:0, vy:0, taken:false, phase:Math.random()*6.28 });
     else
+      // fire | fly | star — flores estaticas (a coleta cuida do efeito)
       powerups.push({ x:x+6, y:y+6, w:28, h:30, type, vx:0, vy:0, taken:false, phase:Math.random()*6.28 });
   }
 
@@ -278,21 +287,21 @@ GGGGGGGGGGGGGGG...GGGGGGGGGGGGG...GGGGGGG..GGGGGGGGGGGGGGG..GGGGGGGGGGGGGGGGGGGG
   // Posições validadas: bloco flutuando com espaço vazio embaixo (acessível
   // por cabeçada). Nunca colocar sobre outro bloco (ficaria inacessível).
   const QBLOCKS_BY_LEVEL = [
-    [ {col:6,  row:6, item:"mushroom"}, {col:37, row:6, item:"fire"} ],
-    [ {col:11, row:5, item:"mushroom"}, {col:39, row:5, item:"fly"} ],
-    [ {col:6,  row:5, item:"mushroom"}, {col:37, row:5, item:"fire"} ],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":41,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":48,"row":6,"item":"fly"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":55,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":54,"row":6,"item":"fly"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":59,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":57,"row":6,"item":"fly"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":47,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":50,"row":6,"item":"fly"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":41,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":53,"row":6,"item":"fly"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":51,"row":6,"item":"fire"}],
-    [{"col":8,"row":6,"item":"mushroom"},{"col":43,"row":6,"item":"fly"}]
+    [ {col:6,  row:6, item:"mushroom"}, {col:22, row:6, item:"star"}, {col:37, row:6, item:"fire"}, {col:27, row:6, item:"egg"} ],
+    [ {col:11, row:5, item:"mushroom"}, {col:22, row:5, item:"star"}, {col:39, row:5, item:"fly"},  {col:16, row:5, item:"egg"} ],
+    [ {col:6,  row:5, item:"mushroom"}, {col:21, row:5, item:"star"}, {col:37, row:5, item:"fire"}, {col:15, row:5, item:"egg"} ],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":24,"row":6,"item":"star"},{"col":41,"row":6,"item":"fire"},{"col":18,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":26,"row":6,"item":"star"},{"col":48,"row":6,"item":"fly"}, {"col":18,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":28,"row":6,"item":"star"},{"col":55,"row":6,"item":"fire"},{"col":19,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":27,"row":6,"item":"star"},{"col":54,"row":6,"item":"fly"}, {"col":19,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":29,"row":6,"item":"star"},{"col":59,"row":6,"item":"fire"},{"col":20,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":28,"row":6,"item":"star"},{"col":57,"row":6,"item":"fly"}, {"col":20,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":25,"row":6,"item":"star"},{"col":47,"row":6,"item":"fire"},{"col":18,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":26,"row":6,"item":"star"},{"col":50,"row":6,"item":"fly"}, {"col":18,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":23,"row":6,"item":"star"},{"col":41,"row":6,"item":"fire"},{"col":17,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":27,"row":6,"item":"star"},{"col":53,"row":6,"item":"fly"}, {"col":15,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":26,"row":6,"item":"star"},{"col":51,"row":6,"item":"fire"},{"col":19,"row":6,"item":"egg"}],
+    [{"col":8,"row":6,"item":"mushroom"},{"col":24,"row":6,"item":"star"},{"col":43,"row":6,"item":"fly"}, {"col":17,"row":6,"item":"egg"}]
   ];
   // Canos gigantes por fase: o jogador entra (seta para baixo) para o subterrâneo.
   // Posições validadas: base no chão, espaço livre acima (subir/entrar/pular por cima).
@@ -324,7 +333,7 @@ G.............b.........................b.................b............G
 G...........................b...................................b......G
 G...................................................b..................G
 G........????...??....????...??....????...??....????...??...????.......G
-G........BBBB.........BBBB.........BBBB.........BBBB........BBBB.......G
+G.....................................................................G
 G.P..?............?............?............?............?..........X..G
 GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
@@ -342,26 +351,63 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function stageIsBoss(i) { return i % STAGES_PER_WORLD === STAGES_PER_WORLD - 1; }
   function themedIndex(i) { return worldOf(i) * 3 + (i % STAGES_PER_WORLD); }  // só p/ fases normais
 
-  // Arena de chefão (castelo): sala fechada por paredes, chão com poças de
-  // lava nas bases e espinhos nas paredes. 'L' lava · '^' espinho · 'Z' chefão.
+  // Fase do chefão (castelo): trecho de travessia com perigos (poças de lava,
+  // gêiseres de lava saltitante, espinhos no teto/chão em zigue-zague, inimigos)
+  // e, ao final, a sala do chefão. Legenda:
+  //   L lava (mortal) · J gêiser de lava (dispara jatos p/ cima)
+  //   ^ espinho no chão · v espinho no teto · E inimigo · B tijolo · G chão
+  //   P início · Z chefão
   function buildArena(opts) {
-    const AW = 22, AH = 10, g = AH - 1;
+    opts = opts || {};
+    const AW = 62, AH = 10, g = AH - 1;
     const rows = Array.from({ length: AH }, () => Array(AW).fill("."));
-    for (let r = 0; r < AH; r++) { rows[r][0] = "B"; rows[r][AW - 1] = "B"; }  // paredes
-    for (let c = 0; c < AW; c++) rows[g][c] = "G";                              // chão
-    rows[g][1] = "L"; rows[g][2] = "L"; rows[g][AW - 3] = "L"; rows[g][AW - 2] = "L"; // lava
-    for (const r of [5, 6]) { rows[r][1] = "^"; rows[r][AW - 2] = "^"; }        // espinhos na parede
-    if (opts.platforms) { for (const c of [6, 7, 8]) rows[5][c] = "B"; for (const c of [13, 14, 15]) rows[5][c] = "B"; }
-    rows[g - 1][3] = "P";
-    rows[g - 1][opts.bossCol] = "Z";
+    // teto e paredes
+    for (let c = 0; c < AW; c++) rows[0][c] = "B";
+    for (let r = 0; r < AH; r++) { rows[r][0] = "B"; rows[r][AW - 1] = "B"; }
+    // chão inteiro
+    for (let c = 0; c < AW; c++) rows[g][c] = "G";
+
+    // ---- Travessia (cols 1..44) ----
+    // poças de lava no chão (mortais, exigem pulo)
+    for (const c of [9, 10, 24, 25, 38, 39]) rows[g][c] = "L";
+    // gêiseres de lava saltitante (jatos periódicos p/ cima)
+    for (const c of [15, 32]) rows[g - 1][c] = "J";
+    // espinhos no teto em zigue-zague (alternando alturas, sem ficar acima
+    // de lava, plataforma segura ou gêiser — dá margem para o pulo do jogador)
+    for (const c of [6, 22, 36])  rows[2][c] = "v";
+    for (const c of [14, 30, 44]) rows[3][c] = "v";
+    // espinhos no chão espalhados pela rota
+    for (const c of [19, 28, 43])         rows[g - 1][c] = "^";
+    // plataformas seguras (pedras de passagem sobre as lavas)
+    for (const c of [11, 12])             rows[5][c] = "B";
+    for (const c of [26, 27])             rows[5][c] = "B";
+    for (const c of [40, 41])             rows[5][c] = "B";
+    // inimigos ao longo da travessia
+    for (const c of [7, 22, 36])          rows[g - 1][c] = "E";
+
+    // ---- Sala do chefão (cols 45..AW-2) ----
+    // fosso de lava separa a travessia da arena do chefão
+    rows[g][45] = "L"; rows[g][46] = "L";
+    // lava nas laterais da arena (contém o chefão)
+    rows[g][AW - 3] = "L"; rows[g][AW - 2] = "L";
+    // espinhos na parede do fundo
+    for (const r of [5, 6]) rows[r][AW - 2] = "^";
+    // plataformas na arena (para chefões que exigem manobra vertical)
+    if (opts.platforms) {
+      for (const c of [50, 51, 52]) rows[5][c] = "B";
+      for (const c of [55, 56, 57]) rows[5][c] = "B";
+    }
+
+    rows[g - 1][2] = "P";
+    rows[g - 1][opts.bossCol || 55] = "Z";
     return rows.map(r => r.join("")).join("\n");
   }
   const BOSS_ARENAS = [
-    buildArena({ bossCol: 16 }),                    // Brutão
-    buildArena({ bossCol: 10, platforms: true }),   // Bocão
-    buildArena({ bossCol: 17, platforms: true }),   // Assombro
-    buildArena({ bossCol: 14 }),                    // Cavucão
-    buildArena({ bossCol: 17 }),                    // Rei Dragão
+    buildArena({ bossCol: 55 }),                    // Brutão
+    buildArena({ bossCol: 53, platforms: true }),   // Bocão
+    buildArena({ bossCol: 56, platforms: true }),   // Assombro
+    buildArena({ bossCol: 55 }),                    // Cavucão
+    buildArena({ bossCol: 57 }),                    // Rei Dragão
   ];
 
 
@@ -376,6 +422,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   let score = 0, lives = 3;
   let infinite = false;          // modo vidas infinitas
   let invincible = false;        // modo invencível (não morre nunca)
+  // Invencibilidade temporária (flor roxa): expira automaticamente.
+  let starUntil = 0;             // timestamp ms; enquanto Date.now() < starUntil, esta ativo
+  let starTimeoutId = null;      // handle do timeout que retoma a musica normal
+  const STAR_MS = 10000;         // duracao do power-up
+  const starActive = () => Date.now() < starUntil;
   let audioMuted = false;        // som ligado/desligado
   const START_LIVES = 3;
   const SAVE_KEY = "sapobros_save_v1";
@@ -395,7 +446,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   let boss = null;              // chefão da arena (um por estágio de chefão)
   let bossShots = [];           // projéteis do chefão {type,x,y,w,h,vx,vy,g,...}
   let lavas = [];               // poças de lava (mortais) na arena de chefão
-  let spikes = [];              // espinhos na parede (causam dano)
+  let spikes = [];              // espinhos {x,y,w,h,dir:"left"|"right"|"up"|"down"}
+  let geysers = [];             // gêiseres de lava saltitante (dispara jatos p/ cima)
+  let lavaShots = [];           // jatos de lava lançados por gêiseres (dano/morte)
   let bossStage = false;        // o estágio atual é uma arena de chefão?
   let levelW = 0, levelH = 0;
   let cameraX = 0;
@@ -407,17 +460,56 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     x:0, y:0, w:30, h:38, vx:0, vy:0,
     onGround:false, face:1, walk:0, dead:false, deadT:0, blink:0, spawnX:0, spawnY:0,
     power:"small",            // small | big | fire | fly
+    mount:null,               // null | { peck, peckCd, fart, fartCd, walk } — avestruz
     invuln:0,                 // quadros de invulnerabilidade após tomar dano
     fireCd:0,                 // recarga do tiro de fogo
     safeX:0, safeY:0          // última posição segura no chão (modo invencível)
   };
 
+  // Tamanho do jogador quando montado no avestruz (independe do poder).
+  const MOUNT_SIZE = { w:44, h:74 };
+  const OSTRICH_JUMP = -14.8;   // pulo mais alto montado
+  const OSTRICH_MAX_VX = 5.4;   // corre um pouco mais rápido
+  const PECK_RANGE = 30;        // alcance da bicada (à frente)
+  const FART_RANGE = 16;        // alcance do "pum" (atrás) — ~1cm na tela
+  const FART_LIFE  = 130;       // duração da nuvem (frames) — quase 2s
+  let fartClouds = [];          // {x,y,w,h,life,maxLife,vx} nuvens tóxicas atrás
+  let ostrichRunaways = [];     // {x,y,vx,vy,life} avestruzes que fugiram após dano
+  let shakeT = 0;               // frames restantes de tremor de tela
+  let shakeMag = 0;             // magnitude atual do tremor (pixels)
+
   // Troca o poder ajustando o tamanho, mantendo os pés no chão e o centro.
   function setPower(np) {
-    const s = sizeFor(np);
+    const s = player.mount ? MOUNT_SIZE : sizeFor(np);
     player.y += player.h - s.h;
     player.x += (player.w - s.w) / 2;
     player.w = s.w; player.h = s.h; player.power = np;
+  }
+  // Sobe no avestruz (aumenta o hitbox mantendo os pés no chão).
+  function mountUp() {
+    const p = player;
+    if (p.mount) { score += 500; updateHUD(); return; }   // já montado: bônus
+    const oldW = p.w, oldH = p.h;
+    p.y -= (MOUNT_SIZE.h - oldH);
+    p.x += (oldW - MOUNT_SIZE.w) / 2;
+    p.w = MOUNT_SIZE.w; p.h = MOUNT_SIZE.h;
+    p.mount = { peck:0, peckCd:0, fart:0, fartCd:0, walk:0 };
+    snd("powerup");
+  }
+  // Desce do avestruz. Se runAway=true, ele foge assustado (após levar dano).
+  function dismount(runAway) {
+    const p = player;
+    if (!p.mount) return;
+    const s = sizeFor(p.power);
+    const centerX = p.x + p.w/2;
+    const feetY = p.y + p.h;
+    p.mount = null;
+    p.w = s.w; p.h = s.h;
+    p.x = centerX - s.w/2;
+    p.y = feetY - s.h;
+    if (runAway) {
+      ostrichRunaways.push({ x:p.x - 10, y:p.y, vx:-p.face * 3.6, vy:-6, life:80 });
+    }
   }
 
   // ============================================================
@@ -474,7 +566,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function clearScene() {
     solids = []; coins = []; enemies = []; particles = []; flag = null;
     powerups = []; fireballs = []; pipes = []; exitPipe = null; flagAnim = null;
-    boss = null; bossShots = []; lavas = []; spikes = []; bossStage = false;
+    boss = null; bossShots = []; lavas = []; spikes = []; geysers = []; lavaShots = []; bossStage = false;
+    fartClouds = []; ostrichRunaways = [];
+    if (player.mount) dismount(false);   // avestruz não persiste entre fases/morte
     enemyShots = [];   // _enemyIdx acumula entre fases p/ variar melhor os tipos
   }
 
@@ -552,7 +646,17 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         } else if (ch === "L") {
           lavas.push({ x, y:y + 10, w:TILE, h:TILE - 10 });      // poça de lava (mortal)
         } else if (ch === "^") {
-          spikes.push({ x, y, w:TILE, h:TILE });                 // espinho na parede (dano)
+          // Espinho na parede/chão: se estiver colado a uma parede, aponta p/ dentro;
+          // caso contrário, aponta p/ cima (chão). O dir é decidido pela vizinhança.
+          const onLeftWall  = c === 0;
+          const onRightWall = c === map[r].length - 1;
+          const dir = onLeftWall ? "left" : onRightWall ? "right" : "up";
+          spikes.push({ x, y, w:TILE, h:TILE, dir });
+        } else if (ch === "v") {
+          spikes.push({ x, y, w:TILE, h:TILE, dir:"down" });     // espinho no teto
+        } else if (ch === "J") {
+          // Gêiser: dispara jatos de lava para cima em intervalos regulares.
+          geysers.push({ x:x + TILE/2, y:y + TILE, t: (geysers.length*37) % 90, cd: 130 });
         } else if (ch === "Z") {
           bossSpawn = { x, y };
         } else if (ch === "F") {
@@ -569,13 +673,18 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       return;   // arenas de chefão não têm power-ups/blocos/canos
     }
     (POWERUPS_BY_LEVEL[themedIndex(idx)] || []).forEach(pu => spawnPowerup(pu.type, pu.col * TILE, pu.row * TILE));
-    // blocos "?" (soltam item na cabeçada). Proteção: nunca colocar sobre
-    // outro sólido (embaixo deve estar vazio, senão a cabeçada é impossível).
+    // blocos "?" (soltam item na cabeçada). Proteção dupla:
+    //  (a) nunca colocar SOBRE outro sólido — a colisão hit-the-brick vence
+    //      antes da cabeçada no "?", deixando o bloco visualmente ativo mas
+    //      sem responder à cabeçada.
+    //  (b) nunca colocar com sólido DIRETAMENTE ABAIXO — o jogador não teria
+    //      espaço para pular por baixo e a cabeçada é impossível.
     (QBLOCKS_BY_LEVEL[themedIndex(idx)] || []).forEach(q => {
       const bx = q.col * TILE, by = q.row * TILE;
-      const belowBlocked = solids.some(s =>
-        (bx + TILE/2) > s.x && (bx + TILE/2) < s.x + s.w && Math.abs(s.y - (by + TILE)) < 2);
-      if (belowBlocked) return;   // sem espaço embaixo -> ignora (inacessível)
+      const atRect    = { x:bx, y:by,          w:TILE, h:TILE };
+      const belowRect = { x:bx, y:by + TILE,   w:TILE, h:2    };
+      const bad = solids.some(s => rectsOverlap(atRect, s) || rectsOverlap(belowRect, s));
+      if (bad) return;
       solids.push({ x:bx, y:by, w:TILE, h:TILE, type:"question", item:q.item, used:false, bump:0 });
     });
     // canos gigantes (2x2 tiles) que levam ao subterrâneo. Proteção: não
@@ -797,7 +906,11 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     p.x = flag.x - p.w + 4;     // encosta no mastro
     p.vx = 0; p.vy = 0; p.face = 1; p.walk = 0; p.invuln = 0;
     flagAnim = { phase: "slide", t: 0, bannerY: Math.max(flag.y + 8, Math.min(p.y - 4, poleBase - 34)) };
-    musicStop();
+    // Music de fim de fase — substitui a musica normal a partir daqui e continua
+    // tocando durante o slide, o hop e a tela de mensagem (nao chamamos musicStop
+    // em completeLevel pra deixar o mp3 terminar naturalmente).
+    if (window.Sound && window.Sound.startLevelCompleteMusic) window.Sound.startLevelCompleteMusic();
+    else musicStop();
     snd("flag");
   }
 
@@ -827,8 +940,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   }
 
   function completeLevel() {
-    musicStop();
-    snd("levelclear");
+    // Nao paramos a musica aqui: a Level Complete Theme comecou em startFlagpole
+    // e deve tocar ate o fim (ou ate o proximo stage carregar via musicStart).
+    // Tambem removemos o snd("levelclear") pra nao conflitar com o mp3.
     unlocked = Math.max(unlocked, Math.min(levelIdx + 1, NUM_STAGES - 1));
     const wasBoss = stageIsBoss(levelIdx);
     if (levelIdx + 1 >= NUM_STAGES) {
@@ -879,7 +993,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     $lives.textContent = invincible ? "🛡️" : (infinite ? "∞" : lives);
     if ($power) $power.textContent = POWER_ICON[player.power] || "—";
     if ($powerBox) $powerBox.style.background = POWER_BG[player.power] || POWER_BG.small;
-    if ($btnFire) $btnFire.classList.toggle("hidden", player.power !== "fire");
+    if ($btnFire) $btnFire.classList.toggle("hidden", player.power !== "fire" && !player.mount);
   }
 
   // ============================================================
@@ -888,6 +1002,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function update() {
     if (state !== "play") return;
     tick++;
+    if (shakeT > 0) { shakeT--; shakeMag *= 0.9; if (shakeT === 0) shakeMag = 0; }
 
     const p = player;
 
@@ -905,12 +1020,13 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (keys.left)  { p.vx -= MOVE; p.face = -1; }
     if (keys.right) { p.vx += MOVE; p.face = 1; }
     if (!keys.left && !keys.right) p.vx *= FRICTION;
-    p.vx = Math.max(-MAX_VX, Math.min(MAX_VX, p.vx));
+    const maxVx = p.mount ? OSTRICH_MAX_VX : MAX_VX;
+    p.vx = Math.max(-maxVx, Math.min(maxVx, p.vx));
     if (Math.abs(p.vx) < 0.05) p.vx = 0;
 
-    // Jump (mais alto quando com power-up)
+    // Jump (mais alto quando com power-up; ainda mais alto montado)
     if (keys.jump && p.onGround) {
-      p.vy = (p.power === "small") ? JUMP_VY : POWER_JUMP;
+      p.vy = p.mount ? OSTRICH_JUMP : ((p.power === "small") ? JUMP_VY : POWER_JUMP);
       p.onGround = false;
       spawnDust(p.x + p.w/2, p.y + p.h);
       snd("jump");
@@ -929,14 +1045,20 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     }
     if (p.vy > 16) p.vy = 16;
 
-    // Tiro de fogo (flor de fogo 🔥)
+    // Tiro de fogo (flor de fogo 🔥) OU bicada do avestruz (F/X)
     if (p.fireCd > 0) p.fireCd--;
-    if (keys.fire && p.power === "fire" && p.fireCd <= 0) {
-      shootFireball();
-      p.fireCd = FIRE_COOLDOWN;
+    if (keys.fire) {
+      if (p.mount && p.mount.peckCd <= 0) {
+        ostrichPeck();
+        p.mount.peckCd = 22;
+      } else if (p.power === "fire" && p.fireCd <= 0) {
+        shootFireball();
+        p.fireCd = FIRE_COOLDOWN;
+      }
     }
     keys.fire = false;
     if (p.invuln > 0) p.invuln--;
+    if (p.mount) updateMount(p);
 
     // Move + collide X
     p.x += p.vx;
@@ -963,10 +1085,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
     updateEnemies();
     updateEnemyShots();
-    if (bossStage) { updateBoss(); updateBossShots(); checkHazards(); }
+    if (bossStage) { updateBoss(); updateBossShots(); updateGeysers(); updateLavaShots(); checkHazards(); }
     updateCoins();
     updatePowerups();
     updateFireballs();
+    updateFartClouds();
+    updateOstrichRunaways();
     updateParticles();
     for (const s of solids) if (s.bump > 0) s.bump--;   // animação da cabeçada no "?"
     if (pipeCd > 0) pipeCd--;                            // recarga do cano
@@ -1028,7 +1152,16 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     const px = s.x + (TILE - 28) / 2;
     spawnPowerup(s.item || "mushroom", px, s.y - TILE);   // aparece por cima
     const pu = powerups[powerups.length - 1];
-    if (pu) pu.vy = -4;                                    // pula para fora do bloco
+    if (!pu) return;
+    if (pu.type === "star") {
+      // Brota do bloco: comeca escondida atras dele e sobe suave ate pousar em cima.
+      pu.y = s.y;                            // inicia dentro/atras do bloco
+      pu.emerging = 24;                      // frames restantes de "sprout"
+      pu.emergeFromY = s.y;
+      pu.emergeToY = s.y - pu.h;
+    } else {
+      pu.vy = -4;                            // demais itens: pulam pra fora
+    }
   }
 
   function updateEnemies() {
@@ -1051,6 +1184,15 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
       // Colisão com o jogador
       if (rectsOverlap(p, e) && !p.dead) {
+        if (starActive()) {
+          // Flor roxa: mata qualquer inimigo (inclusive espinhos) no toque.
+          e.alive = false; e.squash = 16;
+          score += 200; updateHUD();
+          spawnPop(e.x + e.w/2, e.y + e.h/2);
+          snd("stomp");
+          if (e.split) spawnSplit(e);
+          continue;
+        }
         const stomping = p.vy > 0 && (p.y + p.h) - e.y < 20;
         if (stomping && !e.spiky) {
           e.alive = false; e.squash = 16;
@@ -1309,7 +1451,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     if (!b || b.invT > 0 || b.dying) return false;
     b.hp -= n; b.hitFlash = 12; b.invT = 45; snd("bump");
     spawnSpark(b.x + b.w/2, b.y + b.h/2);
-    if (b.hp <= 0) { b.dying = true; b.dieT = 0; snd("stomp"); score += 2000; updateHUD(); spawnPop(b.x + b.w/2, b.y + b.h/2); }
+    if (b.hp <= 0) {
+      b.dying = true; b.dieT = 0; snd("stomp"); score += 2000; updateHUD(); spawnPop(b.x + b.w/2, b.y + b.h/2);
+      // Toca a Castle Complete Theme durante a animacao de morte do chefao e
+      // segue tocando pela tela de "Chefao derrotado" (completeLevel nao para a musica).
+      if (window.Sound && window.Sound.startCastleCompleteMusic) window.Sound.startCastleCompleteMusic();
+    }
     return true;
   }
   function bossPlayerCollide() {
@@ -1323,8 +1470,15 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   // Dano ao jogador (perde poder ou morre) — usado por espinhos, lava e chefões
   function damagePlayer() {
     const p = player;
-    if (invincible || p.invuln > 0 || p.dead) return;
+    if (invincible || starActive() || p.invuln > 0 || p.dead) return;
     if (chosen === 1) voice("minja_trouble");
+    // Montado: o avestruz foge assustado no lugar do dano ao jogador.
+    if (p.mount) {
+      dismount(true);
+      p.invuln = 100; p.vy = -6;
+      spawnSpark(p.x + p.w/2, p.y + p.h/2); updateHUD(); snd("powerdown");
+      return;
+    }
     if (p.power !== "small") {
       setPower("small"); p.invuln = 100; p.vy = -6;
       spawnSpark(p.x + p.w/2, p.y + p.h/2); updateHUD(); snd("powerdown");
@@ -1336,6 +1490,29 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     const p = player; if (p.dead) return;
     for (const L of lavas) if (rectsOverlap(p, L)) { killPlayer(); return; }
     for (const s of spikes) if (rectsOverlap(p, s)) { damagePlayer(); return; }
+    for (const s of lavaShots) if (rectsOverlap(p, s)) { killPlayer(); return; }
+  }
+  // Gêiseres: acumulam tempo e disparam um jato de lava vertical periodicamente.
+  function updateGeysers() {
+    for (const g of geysers) {
+      g.t++;
+      if (g.t >= g.cd) {
+        g.t = 0;
+        // jato principal + duas gotas leves para os lados
+        lavaShots.push({ x: g.x - 8, y: g.y - 16, w:16, h:20, vx:0,    vy:-11, life:180 });
+        lavaShots.push({ x: g.x - 8, y: g.y - 16, w:12, h:14, vx:-1.4, vy:-9,  life:150 });
+        lavaShots.push({ x: g.x - 8, y: g.y - 16, w:12, h:14, vx: 1.4, vy:-9,  life:150 });
+      }
+    }
+  }
+  function updateLavaShots() {
+    for (const s of lavaShots) {
+      s.life--;
+      s.vy += 0.42;                 // gravidade
+      s.x += s.vx; s.y += s.vy;
+      if (s.y > levelH || s.life <= 0) s.dead = true;
+    }
+    lavaShots = lavaShots.filter(s => !s.dead);
   }
 
   // Projéteis dos chefões
@@ -1394,6 +1571,9 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     player.dead = true;
     player.deadT = 0;
     player.vy = -9;
+    // Cancela invencibilidade temporaria pra nao vazar musica/estado entre vidas.
+    if (starTimeoutId) { clearTimeout(starTimeoutId); starTimeoutId = null; }
+    starUntil = 0;
     musicStop();
     snd("die");
     // voz do Jones ao morrer (reusa o clipe de voz do Jones)
@@ -1406,6 +1586,22 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     for (const it of powerups) {
       if (it.taken) continue;
       it.phase += 0.1;
+
+      // "Brotando" do bloco: sobe suave, sem gravidade nem colisao (o bloco esta
+      // logo abaixo — nao queremos que a fisica normal pare a subida no meio).
+      if (it.emerging && it.emerging > 0) {
+        it.emerging -= 1;
+        const t = 1 - (it.emerging / 24);           // 0 -> 1
+        it.y = it.emergeFromY + (it.emergeToY - it.emergeFromY) * t;
+        if (it.emerging <= 0) { it.vy = 0; it.emerging = 0; }
+        // coleta ja rola durante o sprout (caso o jogador esteja em cima)
+        if (rectsOverlap(p, it)) {
+          it.taken = true;
+          collectPower(it.type);
+          spawnSpark(it.x + it.w/2, it.y + it.h/2);
+        }
+        continue;
+      }
 
       // Movimento horizontal: só o cogumelo anda (e vira nas paredes)
       if (it.type === "mushroom") {
@@ -1453,6 +1649,23 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       setPower("fly");
       score += 200;
       snd("powerup");
+    } else if (type === "egg") {
+      mountUp();
+      score += 300;
+      updateHUD();
+    } else if (type === "star") {
+      // Invencibilidade temporaria: mantem o poder atual, so ativa timer.
+      starUntil = Date.now() + STAR_MS;
+      score += 500;
+      snd("powerup");
+      if (window.Sound && window.Sound.startInvincibilityMusic) window.Sound.startInvincibilityMusic();
+      // Ao expirar, retomar a musica adequada (se ainda estivermos jogando).
+      if (starTimeoutId) clearTimeout(starTimeoutId);
+      starTimeoutId = setTimeout(() => {
+        starTimeoutId = null;
+        starUntil = 0;
+        if (state === "play" && !underground && !player.dead) musicStart();
+      }, STAR_MS);
     }
     // voz do personagem ao pegar cogumelo/flor
     voice(CHARACTERS[chosen].voice);
@@ -1460,6 +1673,91 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   }
 
   // ---- FIREBALLS ----
+  // Bicada do avestruz: hitbox curta na direção que o jogador olha.
+  function ostrichPeck() {
+    const p = player, m = p.mount; if (!m) return;
+    m.peck = 12;
+    const hb = { x: p.face > 0 ? p.x + p.w - 4 : p.x - PECK_RANGE + 4,
+                 y: p.y + 10, w: PECK_RANGE, h: 26 };
+    for (const e of enemies) {
+      if (!e.alive || e.spiky) continue;
+      if (rectsOverlap(hb, e)) {
+        e.alive = false; e.squash = 16;
+        score += 150; updateHUD();
+        spawnPop(e.x + e.w/2, e.y + e.h/2);
+        snd("kick");
+        if (e.split) spawnSplit(e);
+      }
+    }
+    // acerta o chefão se vulnerável ao contato
+    if (boss && !boss.dying && rectsOverlap(hb, boss) && bossStompable(boss)) bossHurt(1);
+    snd("shoot");
+  }
+  // Atualização por quadro do avestruz: cooldowns, fart automático,
+  // detecção de inimigo atrás -> solta uma nuvem tóxica que fica curto no ar.
+  function updateMount(p) {
+    const m = p.mount; if (!m) return;
+    if (m.peck > 0) m.peck--;
+    if (m.fart > 0) m.fart--;
+    if (m.peckCd > 0) m.peckCd--;
+    if (m.fartCd > 0) m.fartCd--;
+    m.walk = (m.walk + Math.abs(p.vx) * 0.06) % 6.283;
+    if (m.fartCd <= 0) {
+      // Só solta o "pum" quando o inimigo está BEM próximo (~1cm atrás).
+      const zone = { x: p.face > 0 ? p.x - FART_RANGE : p.x + p.w,
+                     y: p.y + 4, w: FART_RANGE, h: p.h - 8 };
+      let target = null;
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        if (rectsOverlap(zone, e)) { target = e; break; }
+      }
+      if (target) {
+        m.fart = 24; m.fartCd = FART_LIFE + 20;
+        // Nuvem densa e demorada: começa grande e escura, dissipa lentamente.
+        const cx = p.face > 0 ? p.x - 20 : p.x + p.w - 40;
+        fartClouds.push({
+          x: cx, y: p.y + p.h*0.55 - 18,
+          w: 60, h: 44, vx: -p.face * 0.45,
+          life: FART_LIFE, maxLife: FART_LIFE,
+        });
+        snd("fart");
+        triggerShake(8, 22);   // magnitude, frames
+      }
+    }
+  }
+  function triggerShake(mag, frames) {
+    if (mag > shakeMag) shakeMag = mag;
+    if (frames > shakeT) shakeT = frames;
+  }
+  function updateFartClouds() {
+    for (const c of fartClouds) {
+      c.life--;
+      c.x += c.vx; c.vx *= 0.94;         // desacelera com o tempo (viscoso)
+      c.w += 0.35; c.h += 0.22;          // expansão suave, cloud permanece denso
+      if (c.life <= 0) c.dead = true;
+      if (!c.dead) {
+        for (const e of enemies) {
+          if (!e.alive || e.spiky) continue;
+          if (rectsOverlap(c, e)) {
+            e.alive = false; e.squash = 16;
+            score += 100; updateHUD();
+            spawnPop(e.x + e.w/2, e.y + e.h/2);
+            snd("kick");
+            if (e.split) spawnSplit(e);
+          }
+        }
+      }
+    }
+    fartClouds = fartClouds.filter(c => !c.dead);
+  }
+  function updateOstrichRunaways() {
+    for (const o of ostrichRunaways) {
+      o.life--; o.vy += 0.5; o.x += o.vx; o.y += o.vy;
+      if (o.life <= 0) o.dead = true;
+    }
+    ostrichRunaways = ostrichRunaways.filter(o => !o.dead);
+  }
+
   function shootFireball() {
     if (fireballs.filter(f => !f.dead).length >= 3) return;   // no máx. 3 na tela
     const p = player;
@@ -1793,7 +2091,32 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       const cx = x + it.w/2, cy = y + it.h/2;
       const bob = Math.sin(it.phase) * 2;
 
-      if (it.type === "mushroom") {
+      // Enquanto brota, corta o desenho na altura do topo do bloco pra parecer
+      // que a flor esta emergindo (a metade dentro do bloco fica invisivel).
+      let clipped = false;
+      if (it.emerging && it.emerging > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, W, it.emergeFromY);   // so pinta acima do topo do bloco
+        ctx.clip();
+        clipped = true;
+      }
+
+      if (it.type === "egg") {
+        // Ovo de avestruz: forma oval creme com pintinhas
+        ctx.save(); ctx.translate(cx, cy + bob);
+        ctx.fillStyle = "#f3e2b6";
+        ctx.beginPath(); ctx.ellipse(0, 0, it.w/2, it.h/2, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#e0c98a";
+        ctx.beginPath(); ctx.ellipse(-3, -2, it.w/2 - 4, it.h/2 - 4, 0, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = "#6a4a1d";
+        for (const [dx, dy, r] of [[-4,-3,1.4],[3,2,1.2],[-2,4,1.1],[5,-4,1.0],[0,-6,1.1]]) {
+          ctx.beginPath(); ctx.arc(dx, dy, r, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = "rgba(255,255,255,.5)";
+        ctx.beginPath(); ctx.ellipse(-4, -6, 3, 2, -0.6, 0, 7); ctx.fill();
+        ctx.restore();
+      } else if (it.type === "mushroom") {
         // caule
         ctx.fillStyle = "#f2e2c4";
         roundRect(cx - 8, cy, 16, it.h/2 - 2, 4); ctx.fill();
@@ -1808,15 +2131,29 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         ctx.fillStyle = "#fff";
         ctx.beginPath(); ctx.arc(cx, cy - 6, 4, 0, 7); ctx.arc(cx - 8, cy - 2, 3, 0, 7); ctx.arc(cx + 8, cy - 2, 3, 0, 7); ctx.fill();
       } else {
-        // FLOR (fogo = laranja/vermelho, voo = azul/branco)
+        // FLOR (fogo = laranja/vermelho, voo = azul/branco, star = roxo)
         const fire = it.type === "fire";
-        const petal = fire ? "#ff8a2b" : "#7fd1ff";
-        const petal2 = fire ? "#ffcf33" : "#d4ecff";
+        const star = it.type === "star";
+        let petal, petal2, core;
+        if (fire)      { petal = "#ff8a2b"; petal2 = "#ffcf33"; core = "#e23b2e"; }
+        else if (star) { petal = "#b26bff"; petal2 = "#f0d5ff"; core = "#6a1fbf"; }
+        else           { petal = "#7fd1ff"; petal2 = "#d4ecff"; core = "#4a90e2"; }
         // caule + folha
         ctx.strokeStyle = "#3fa64d"; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(cx, cy + 2 + bob); ctx.lineTo(cx, y + it.h); ctx.stroke();
         ctx.fillStyle = "#3fa64d";
         ctx.beginPath(); ctx.ellipse(cx + 7, y + it.h - 6, 6, 3, -0.6, 0, 7); ctx.fill();
+        // brilho pulsante ao redor da flor roxa (chama atencao)
+        if (star) {
+          const pulse = 0.35 + Math.abs(Math.sin(it.phase * 2)) * 0.35;
+          ctx.save();
+          ctx.globalAlpha = pulse * 0.5;
+          const g = ctx.createRadialGradient(cx, cy - 4 + bob, 2, cx, cy - 4 + bob, 22);
+          g.addColorStop(0, "#e0b0ff"); g.addColorStop(1, "rgba(178,107,255,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(cx, cy - 4 + bob, 22, 0, 7); ctx.fill();
+          ctx.restore();
+        }
         // pétalas
         ctx.save(); ctx.translate(cx, cy - 4 + bob);
         ctx.fillStyle = petal;
@@ -1825,7 +2162,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
           ctx.beginPath(); ctx.ellipse(0, -9, 5, 8, 0, 0, 7); ctx.fill();
         }
         // asinhas na flor voadora
-        if (!fire) {
+        if (!fire && !star) {
           ctx.fillStyle = "rgba(255,255,255,.9)";
           const flap = Math.sin(it.phase * 3) * 0.3;
           ctx.save(); ctx.rotate(-0.5 + flap); ctx.beginPath(); ctx.ellipse(-14, -6, 7, 4, 0, 0, 7); ctx.fill(); ctx.restore();
@@ -1834,10 +2171,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
         // miolo
         ctx.fillStyle = petal2;
         ctx.beginPath(); ctx.arc(0, -4, 6, 0, 7); ctx.fill();
-        ctx.fillStyle = fire ? "#e23b2e" : "#4a90e2";
+        ctx.fillStyle = core;
         ctx.beginPath(); ctx.arc(0, -4, 3, 0, 7); ctx.fill();
         ctx.restore();
       }
+
+      if (clipped) ctx.restore();
     }
   }
 
@@ -1914,15 +2253,65 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
   function drawSpikes() {
     for (const s of spikes) {
       const x = s.x - cameraX; if (x + s.w < 0 || x > W) continue;
-      const left = s.x < levelW / 2;
-      ctx.fillStyle = "#8a8f9a"; if (left) ctx.fillRect(x - 2, s.y, 4, s.h); else ctx.fillRect(x + s.w - 2, s.y, 4, s.h);
+      const dir = s.dir || (s.x < levelW / 2 ? "left" : "right");
       ctx.fillStyle = "#c9ccd4";
-      for (let i = 0; i < 3; i++) {
-        const yy = s.y + 5 + i * 11; ctx.beginPath();
-        if (left) { ctx.moveTo(x, yy); ctx.lineTo(x + s.w * 0.75, yy + 5); ctx.lineTo(x, yy + 11); }
-        else      { ctx.moveTo(x + s.w, yy); ctx.lineTo(x + s.w * 0.25, yy + 5); ctx.lineTo(x + s.w, yy + 11); }
-        ctx.closePath(); ctx.fill();
+      if (dir === "left" || dir === "right") {
+        ctx.fillStyle = "#8a8f9a";
+        if (dir === "left") ctx.fillRect(x - 2, s.y, 4, s.h);
+        else                ctx.fillRect(x + s.w - 2, s.y, 4, s.h);
+        ctx.fillStyle = "#c9ccd4";
+        for (let i = 0; i < 3; i++) {
+          const yy = s.y + 5 + i * 11; ctx.beginPath();
+          if (dir === "left") { ctx.moveTo(x, yy); ctx.lineTo(x + s.w * 0.75, yy + 5); ctx.lineTo(x, yy + 11); }
+          else                { ctx.moveTo(x + s.w, yy); ctx.lineTo(x + s.w * 0.25, yy + 5); ctx.lineTo(x + s.w, yy + 11); }
+          ctx.closePath(); ctx.fill();
+        }
+      } else {
+        // up (chão): pontas p/ cima na base; down (teto): pontas p/ baixo no topo
+        const up = dir === "up";
+        ctx.fillStyle = "#8a8f9a";
+        if (up) ctx.fillRect(x, s.y + s.h - 4, s.w, 4);
+        else    ctx.fillRect(x, s.y, s.w, 4);
+        ctx.fillStyle = "#c9ccd4";
+        for (let i = 0; i < 3; i++) {
+          const xx = s.x - cameraX + 5 + i * 11; ctx.beginPath();
+          if (up) { ctx.moveTo(xx, s.y + s.h); ctx.lineTo(xx + 5, s.y + s.h * 0.25); ctx.lineTo(xx + 11, s.y + s.h); }
+          else    { ctx.moveTo(xx, s.y);        ctx.lineTo(xx + 5, s.y + s.h * 0.75); ctx.lineTo(xx + 11, s.y); }
+          ctx.closePath(); ctx.fill();
+        }
       }
+    }
+  }
+  function drawGeysers() {
+    const t = performance.now() / 90;
+    for (const g of geysers) {
+      const x = g.x - cameraX; if (x < -20 || x > W + 20) continue;
+      // Base: pequena rachadura fumegante no chão
+      ctx.fillStyle = "#3a2214";
+      ctx.beginPath(); ctx.ellipse(x, g.y - 4, 14, 5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#e0451a";
+      ctx.beginPath(); ctx.ellipse(x, g.y - 6, 10, 3, 0, 0, 7); ctx.fill();
+      // faíscas anunciando a próxima erupção
+      const warn = g.cd - g.t;
+      if (warn > 0 && warn < 20) {
+        ctx.fillStyle = "rgba(255,180,60," + (0.4 + Math.sin(t) * 0.3) + ")";
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.arc(x + (i - 1) * 6, g.y - 10 - (Math.sin(t + i) + 1) * 2, 1.5, 0, 7); ctx.fill();
+        }
+      }
+    }
+  }
+  function drawLavaShots() {
+    for (const s of lavaShots) {
+      const x = s.x - cameraX; if (x + s.w < 0 || x > W) continue;
+      const cx = x + s.w/2, cy = s.y + s.h/2;
+      ctx.fillStyle = "#ff6a1a";
+      ctx.beginPath(); ctx.ellipse(cx, cy, s.w/2, s.h/2, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#ffd06a";
+      ctx.beginPath(); ctx.ellipse(cx, cy - 2, s.w/3, s.h/3, 0, 0, 7); ctx.fill();
+      // rastro
+      ctx.fillStyle = "rgba(255,120,40,.35)";
+      ctx.beginPath(); ctx.ellipse(cx, cy + 8, s.w/3, s.h/4, 0, 0, 7); ctx.fill();
     }
   }
   function drawBossShots() {
@@ -2221,11 +2610,22 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx - 6, by - h*0.36, 2.2, 0, 7); ctx.arc(cx + 6, by - h*0.36, 2.2, 0, 7); ctx.fill();
   }
 
-  // Morcego: corpo escuro, asas batendo, olhinhos vermelhos
+  // Morcego: corpo mauve claro com contorno pra contrastar contra o fundo escuro
+  // da caverna. Sem o contorno, o corpo violeta escuro (#2b2140) desaparecia
+  // contra o gradiente da caverna (#0a0e1a -> #1a2138).
   function drawBat(x, y, w, h) {
     const cx = x + w/2, cy = y + h/2;
     const flap = Math.sin(performance.now() / 90) * 0.7;
-    ctx.fillStyle = "#2b2140";
+    // sombra atras (halo levemente claro pra silhueta se destacar)
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#c8b8e8";
+    ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.85, h * 0.45, 0, 0, 7); ctx.fill();
+    ctx.restore();
+    // asas: preenchimento mauve claro + contorno escuro pra dar definicao
+    ctx.fillStyle = "#8a6bb8";
+    ctx.strokeStyle = "#2b1c40";
+    ctx.lineWidth = 2;
     for (const sgn of [-1, 1]) {
       ctx.save(); ctx.translate(cx, cy); ctx.scale(sgn, 1); ctx.rotate(-0.2 + flap);
       ctx.beginPath();
@@ -2233,17 +2633,32 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       ctx.quadraticCurveTo(w * 0.5, -h * 0.4, w * 0.7, 0);
       ctx.quadraticCurveTo(w * 0.55, h * 0.1, w * 0.35, h * 0.05);
       ctx.quadraticCurveTo(w * 0.5, h * 0.25, 0, h * 0.1);
-      ctx.closePath(); ctx.fill();
+      ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.restore();
     }
-    ctx.fillStyle = "#3a2d54";
-    ctx.beginPath(); ctx.arc(cx, cy, h * 0.34, 0, 7); ctx.fill();
+    // corpo/cabeca com contorno
+    ctx.fillStyle = "#a889d0";
+    ctx.strokeStyle = "#2b1c40";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, h * 0.34, 0, 7); ctx.fill(); ctx.stroke();
     // orelhas
-    ctx.beginPath(); ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx - 9, cy - 13); ctx.lineTo(cx - 2, cy - 8);
-    ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx + 9, cy - 13); ctx.lineTo(cx + 2, cy - 8); ctx.closePath(); ctx.fill();
-    // olhos
+    ctx.fillStyle = "#a889d0";
+    ctx.beginPath();
+    ctx.moveTo(cx - 6, cy - 6); ctx.lineTo(cx - 9, cy - 13); ctx.lineTo(cx - 2, cy - 8);
+    ctx.moveTo(cx + 6, cy - 6); ctx.lineTo(cx + 9, cy - 13); ctx.lineTo(cx + 2, cy - 8);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // presas brancas (leem contra o corpo escurinho)
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, cy + 3); ctx.lineTo(cx - 1, cy + 7); ctx.lineTo(cx - 1, cy + 3);
+    ctx.moveTo(cx + 3, cy + 3); ctx.lineTo(cx + 1, cy + 7); ctx.lineTo(cx + 1, cy + 3);
+    ctx.closePath(); ctx.fill();
+    // olhos vermelhos brilhantes
     ctx.fillStyle = "#ff4d4d";
-    ctx.beginPath(); ctx.arc(cx - 4, cy, 2.2, 0, 7); ctx.arc(cx + 4, cy, 2.2, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx - 4, cy - 1, 2.4, 0, 7); ctx.arc(cx + 4, cy - 1, 2.4, 0, 7); ctx.fill();
+    // brilho nos olhos
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(cx - 4.5, cy - 1.5, 0.8, 0, 7); ctx.arc(cx + 3.5, cy - 1.5, 0.8, 0, 7); ctx.fill();
   }
 
   // A grumpy spiky snail-beetle enemy
@@ -2318,8 +2733,164 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       ctx.beginPath(); ctx.arc(cx, midY, w, 0, 7); ctx.fill();
       ctx.restore();
     }
+    // aura roxa pulsante da invencibilidade temporaria (flor roxa)
+    if (!dead && starActive()) {
+      const remaining = starUntil - Date.now();
+      // pisca mais rapido nos ultimos 2s pra avisar que vai acabar
+      const speed = remaining < 2000 ? 0.6 : 0.3;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + Math.abs(Math.sin(tick * speed)) * 0.35;
+      const g = ctx.createRadialGradient(cx, midY, 4, cx, midY, w * 1.2);
+      g.addColorStop(0, "#e0b0ff"); g.addColorStop(1, "rgba(120,40,200,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, midY, w * 1.2, 0, 7); ctx.fill();
+      ctx.restore();
+    }
 
-    drawSprite(ctx, ch, cx, y + h + 2, dispH, face, walk, dead);
+    if (player.mount && !dead) {
+      drawOstrich(x, y, w, h, face, player.mount);
+      // cavaleiro (menor) sentado sobre as costas do avestruz
+      const riderH = Math.round(h * 0.55);
+      drawSprite(ctx, ch, cx - face * 4, y + h * 0.5 + 6, riderH, face, walk, dead);
+    } else {
+      drawSprite(ctx, ch, cx, y + h + 2, dispH, face, walk, dead);
+    }
+  }
+
+  // Avestruz procedural: corpo escuro, ventre branco, pescoço/cabeça cor de
+  // areia, bico vermelho (abre ao bicar), pernas rosadas.
+  function drawOstrich(x, y, w, h, face, mount) {
+    ctx.save();
+    if (face < 0) { ctx.translate(x + w, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }
+    const walk = (mount && mount.walk) || 0;
+    const cx = x + w * 0.42;
+    const bodyCy = y + h * 0.62;
+    const bodyRx = w * 0.44, bodyRy = h * 0.20;
+    const bob = Math.sin(walk) * 1.5;
+
+    // pernas rosadas (uma p/ frente e outra atrás, alternando)
+    ctx.strokeStyle = "#e0838b"; ctx.lineWidth = 4;
+    const legTop = bodyCy + bodyRy - 4;
+    const legFoot = y + h - 3;
+    const swing = Math.sin(walk) * 4;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, legTop); ctx.lineTo(cx - 5 + swing, legFoot);
+    ctx.moveTo(cx + 5, legTop); ctx.lineTo(cx + 5 - swing, legFoot);
+    ctx.stroke();
+    ctx.fillStyle = "#4a3a2b";
+    ctx.fillRect(cx - 10 + swing, legFoot - 3, 10, 3);
+    ctx.fillRect(cx + 2 - swing, legFoot - 3, 10, 3);
+
+    // cauda cor de areia (plumas atrás)
+    ctx.fillStyle = "#e5cc99";
+    ctx.beginPath(); ctx.ellipse(cx - bodyRx + 2, bodyCy - bodyRy * 0.3 - bob, 11, 15, 0.5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#c9ad78";
+    ctx.beginPath(); ctx.ellipse(cx - bodyRx + 4, bodyCy - bodyRy * 0.1 - bob, 8, 10, 0.5, 0, 7); ctx.fill();
+
+    // corpo escuro
+    ctx.fillStyle = "#2c2621";
+    ctx.beginPath(); ctx.ellipse(cx, bodyCy - bob, bodyRx, bodyRy, 0, 0, 7); ctx.fill();
+    // ventre branco
+    ctx.fillStyle = "#f4ede0";
+    ctx.beginPath(); ctx.ellipse(cx - 4, bodyCy + 2 - bob, bodyRx * 0.55, bodyRy * 0.75, 0.15, 0, 7); ctx.fill();
+
+    // pescoço longo cor de areia
+    const neckX0 = cx + bodyRx * 0.55;
+    const neckY0 = bodyCy - bodyRy * 0.4 - bob;
+    const headX  = cx + bodyRx * 0.55 + 10;
+    const headY  = y + h * 0.16;
+    ctx.strokeStyle = "#e6d8b8"; ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(neckX0, neckY0);
+    ctx.quadraticCurveTo(neckX0 + 6, (neckY0 + headY) / 2, headX, headY);
+    ctx.stroke();
+    // sombra suave no pescoço
+    ctx.strokeStyle = "rgba(160,140,90,.35)"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(neckX0 + 3, neckY0);
+    ctx.quadraticCurveTo(neckX0 + 8, (neckY0 + headY) / 2, headX + 1, headY);
+    ctx.stroke();
+
+    // cabeça
+    ctx.fillStyle = "#e6d8b8";
+    ctx.beginPath(); ctx.arc(headX, headY, 7, 0, 7); ctx.fill();
+    // topete rebelde
+    ctx.strokeStyle = "#c9ad78"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(headX - 3, headY - 5); ctx.lineTo(headX - 4, headY - 10);
+    ctx.moveTo(headX,     headY - 6); ctx.lineTo(headX,     headY - 12);
+    ctx.moveTo(headX + 3, headY - 5); ctx.lineTo(headX + 5, headY - 10);
+    ctx.stroke();
+    // olho
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(headX + 2, headY - 1, 2.4, 0, 7); ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.beginPath(); ctx.arc(headX + 3, headY - 1, 1.2, 0, 7); ctx.fill();
+    // bico vermelho (abre ao bicar)
+    const pecking = mount && mount.peck > 0;
+    ctx.fillStyle = "#d44536";
+    const bx = headX + 6, by = headY;
+    if (pecking) {
+      ctx.beginPath(); ctx.moveTo(bx, by - 4); ctx.lineTo(bx + 15, by - 6); ctx.lineTo(bx + 14, by + 1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(bx, by + 3); ctx.lineTo(bx + 14, by + 5); ctx.lineTo(bx + 12, by + 9); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.moveTo(bx, by - 3); ctx.lineTo(bx + 13, by); ctx.lineTo(bx, by + 3); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawFartClouds() {
+    const t = performance.now() / 220;
+    for (const c of fartClouds) {
+      const x = c.x - cameraX, cx = x + c.w/2, cy = c.y + c.h/2;
+      // Curva de opacidade: densa no começo, fade-out no último terço.
+      const k = c.life / c.maxLife;
+      const alpha = Math.min(0.92, k < 0.33 ? k * 2.7 : 0.9);
+      ctx.save(); ctx.globalAlpha = alpha;
+      // Miolo escuro (verde musgo) — dá corpo à nuvem
+      ctx.fillStyle = "#5c8a2b";
+      ctx.beginPath(); ctx.ellipse(cx, cy, c.w * 0.55, c.h * 0.6, 0, 0, 7); ctx.fill();
+      // Camadas de bolhas em torno pra parecer nuvem densa
+      ctx.fillStyle = "#7fb043";
+      const puffs = [
+        [-c.w*0.35,  c.h*0.05, 0.42, 0.48, 0.0],
+        [ c.w*0.30,  c.h*0.10, 0.44, 0.50, 0.6],
+        [-c.w*0.15, -c.h*0.35, 0.34, 0.38, 0.3],
+        [ c.w*0.10, -c.h*0.30, 0.36, 0.40, 0.9],
+        [-c.w*0.28,  c.h*0.30, 0.30, 0.32, 1.2],
+        [ c.w*0.32,  c.h*0.28, 0.32, 0.34, 1.5],
+      ];
+      for (const [dx, dy, rx, ry, ph] of puffs) {
+        const wob = Math.sin(t + ph) * 2;
+        ctx.beginPath();
+        ctx.ellipse(cx + dx, cy + dy + wob, c.w * rx, c.h * ry, 0, 0, 7);
+        ctx.fill();
+      }
+      // Reflexos amarelados (destaque no topo)
+      ctx.fillStyle = "#c4dc7c";
+      ctx.beginPath(); ctx.ellipse(cx - c.w*0.18, cy - c.h*0.35, c.w * 0.22, c.h * 0.22, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + c.w*0.22, cy - c.h*0.32, c.w * 0.18, c.h * 0.18, 0, 0, 7); ctx.fill();
+      // Contorno tênue pra separar do fundo em áreas claras
+      ctx.globalAlpha = alpha * 0.35;
+      ctx.strokeStyle = "#3f5f1c"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(cx, cy, c.w * 0.58, c.h * 0.62, 0, 0, 7); ctx.stroke();
+      // Umas "partículas" pontuais para dar textura
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.fillStyle = "#8fbf5a";
+      for (let i = 0; i < 5; i++) {
+        const a = t * 0.6 + i * 1.3;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * c.w * 0.3, cy + Math.sin(a) * c.h * 0.35, 2 + (i % 2), 0, 7);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  function drawOstrichRunaways() {
+    for (const o of ostrichRunaways) {
+      const face = o.vx < 0 ? -1 : 1;
+      drawOstrich(o.x - cameraX, o.y, MOUNT_SIZE.w, MOUNT_SIZE.h, face, { walk: performance.now() / 40, peck: 0 });
+    }
   }
 
   function roundRect(x, y, w, h, r) {
@@ -2343,9 +2914,16 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
 
   function render() {
     if (state === "map") { drawMap(); return; }
+    // Tremor de tela: aplica offset aleatório em todo o mundo enquanto shakeT > 0.
+    const shaking = shakeT > 0 && shakeMag > 0.2;
+    if (shaking) {
+      const dx = (Math.random() * 2 - 1) * shakeMag;
+      const dy = (Math.random() * 2 - 1) * shakeMag;
+      ctx.save(); ctx.translate(dx, dy);
+    }
     drawBackground();
     drawSolids();
-    if (bossStage) { drawLava(); drawSpikes(); }
+    if (bossStage) { drawLava(); drawSpikes(); drawGeysers(); drawLavaShots(); }
     drawCoins();
     drawPowerups();
     drawFlag();
@@ -2353,6 +2931,8 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     drawEnemyShots();
     if (bossStage) { drawBoss(); drawBossShots(); }
     drawFireballs();
+    drawFartClouds();
+    drawOstrichRunaways();
     drawParticles();
     if (state === "play" || state === "dead" || state === "paused") {
       // pisca durante a invulnerabilidade
@@ -2363,6 +2943,7 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
     }
     // dica de entrada no cano
     if (state === "play") drawPipeHint();
+    if (shaking) ctx.restore();
   }
 
   // Dica "↓ entrar" quando o jogador está sobre um cano
@@ -2876,6 +3457,12 @@ GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG`;
       bossShots: () => bossShots,
       lavas: () => lavas,
       spikes: () => spikes,
+      geysers: () => geysers,
+      lavaShots: () => lavaShots,
+      fartClouds: () => fartClouds,
+      mount: () => player.mount,
+      mountUp: () => mountUp(),
+      dismount: (runAway) => dismount(!!runAway),
       hurtBoss: (n) => bossHurt(n || 1),
       get bossStage() { return bossStage; },
       get sliding() { return !!flagAnim; },

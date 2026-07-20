@@ -1,8 +1,8 @@
 /* ============================================================
-   SAPO BROS — Motor de áudio (chiptune 8-bit, Web Audio API)
-   Efeitos sonoros e música de fundo ORIGINAIS, no estilo dos
-   clássicos plataformas 8-bit (sem usar áudio protegido).
-   Tudo sintetizado no navegador — nenhum arquivo externo.
+   SAPO BROS — Motor de áudio
+   Efeitos sonoros ORIGINAIS (chiptune 8-bit sintetizado).
+   Música de fundo do overworld: "Ground Theme" (dominio publico).
+   Musica de caverna: sintetizada.
    ============================================================ */
 window.Sound = (() => {
   "use strict";
@@ -128,6 +128,47 @@ window.Sound = (() => {
 
     // sucção do cano: assobio subindo + whoosh de ruído + "slurp" descendo
     suck:       () => { tone(140, 0.42, "sawtooth", 0, 0.20, 1300); tone(680, 0.34, "sine", 0.03, 0.14, 80); whoosh(0.42, 260, 2400, 0.26); },
+
+    // Peido do avestruz: sopro grave e vibrante — dente-de-serra bem baixo
+    // com wobble de frequência + ruído filtrado por baixo pra dar o "prrft".
+    fart:       () => {
+      if (!ensure() || muted) return;
+      const t0 = ctx.currentTime + 0.005;
+      const dur = 0.55;
+      // Componente tonal grave, subindo e caindo pra dar o "blat"
+      const osc = ctx.createOscillator();
+      const og  = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(90, t0);
+      osc.frequency.linearRampToValueAtTime(150, t0 + 0.08);
+      osc.frequency.linearRampToValueAtTime(55, t0 + dur);
+      // LFO pra tremulação (bubbly)
+      const lfo = ctx.createOscillator(); const lfoG = ctx.createGain();
+      lfo.frequency.value = 22; lfoG.gain.value = 18;
+      lfo.connect(lfoG); lfoG.connect(osc.frequency);
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(0.45, t0 + 0.03);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(og); og.connect(master);
+      osc.start(t0); lfo.start(t0);
+      osc.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+      // Camada de ruído filtrada em passa-baixa (o "prrrt")
+      const len = Math.floor(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i/len);
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const lp = ctx.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.setValueAtTime(600, t0);
+      lp.frequency.exponentialRampToValueAtTime(180, t0 + dur);
+      lp.Q.value = 6;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.exponentialRampToValueAtTime(0.35, t0 + 0.04);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(lp); lp.connect(ng); ng.connect(master);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    },
   };
 
   function play(name) {
@@ -136,42 +177,50 @@ window.Sound = (() => {
     if (SFX[name]) { try { SFX[name](); } catch (e) {} }
   }
 
-  // ---- Música de fundo (loop chiptune original) ----
-  const STEP = 0.14;                 // segundos por passo
-  const LEAD = [                     // melodia (0 = pausa)
-    523,659,784,1047, 784,659,523,0,
-    587,698,880,1175, 880,698,587,0,
-    523,659,784,1047, 1319,1047,784,659,
-    587,494,587,698,  784,659,523,0
-  ];
-  const BASS = [                     // baixo (mais grave)
-    131,0,196,0, 131,0,196,0,
-    147,0,196,0, 147,0,196,0,
-    131,0,196,0, 131,0,196,0,
-    98,0,147,0,  196,0,131,0
-  ];
-  let musicOn = false, step = 0, nextTime = 0, timer = null;
-
-  function scheduler() {
-    if (!ctx) return;
-    while (nextTime < ctx.currentTime + 0.12) {
-      const rel = nextTime - ctx.currentTime;
-      const lf = LEAD[step % LEAD.length];
-      const bf = BASS[step % BASS.length];
-      if (lf) tone(lf, STEP * 0.9, "square", rel, 0.10);
-      if (bf) tone(bf, STEP * 0.95, "triangle", rel, 0.13);
-      nextTime += STEP; step++;
-    }
+  // ---- Musicas de fundo (dominio publico, HTMLAudioElement em loop) ----
+  // Overworld: Ground Theme. Arena de chefao: Castle Theme.
+  // Web Audio nao e usado aqui: <audio loop> funciona no iOS Safari desde
+  // que o play() venha de gesto do usuario (ja garantido via resume()).
+  function makeBgm(src, vol, loop) {
+    const a = new Audio(src);
+    a.loop = loop !== false; a.preload = "auto"; a.volume = vol;
+    return a;
   }
-  function startMusic() {
-    if (muted || musicOn || !ensure()) return;
-    musicOn = true;
-    nextTime = ctx.currentTime + 0.05;
-    timer = setInterval(scheduler, 25);
+  const groundBgm         = makeBgm("assets/ground-theme.mp3", 0.35);
+  const castleBgm         = makeBgm("assets/castle-theme.mp3", 0.35);
+  const invincibilityBgm  = makeBgm("assets/invincibility-theme.mp3", 0.42);
+  const levelCompleteBgm  = makeBgm("assets/level-complete.mp3", 0.45, false);
+  const castleCompleteBgm = makeBgm("assets/castle-complete.mp3", 0.45, false);
+  let currentBgm = null;
+
+  function playBgm(audio) {
+    if (muted) return;
+    if (currentBgm === audio) return;
+    // troca de faixa: para a atual antes de comecar a nova.
+    if (currentBgm) {
+      try { currentBgm.pause(); currentBgm.currentTime = 0; } catch (e) {}
+    }
+    currentBgm = audio;
+    // play() retorna Promise; iOS rejeita se nao houver gesto — silencia.
+    const p = audio.play();
+    if (p && typeof p.catch === "function") p.catch(() => { currentBgm = null; });
+  }
+  function startMusic()             { playBgm(groundBgm); }
+  function startCastleMusic()       { playBgm(castleBgm); }
+  function startInvincibilityMusic(){ playBgm(invincibilityBgm); }
+  function startLevelCompleteMusic(){
+    // rebobina pra sempre tocar do inicio (nao e loop)
+    try { levelCompleteBgm.currentTime = 0; } catch (e) {}
+    playBgm(levelCompleteBgm);
+  }
+  function startCastleCompleteMusic(){
+    try { castleCompleteBgm.currentTime = 0; } catch (e) {}
+    playBgm(castleCompleteBgm);
   }
   function stopMusic() {
-    musicOn = false;
-    if (timer) { clearInterval(timer); timer = null; }
+    if (!currentBgm) return;
+    try { currentBgm.pause(); currentBgm.currentTime = 0; } catch (e) {}
+    currentBgm = null;
   }
 
   // ---- Música de TERROR (subterrâneo) — composição original em menor/trítono ----
@@ -265,11 +314,11 @@ window.Sound = (() => {
   try { loadVoices(); } catch (e) {}
 
   return {
-    play, playVoice, resume, startMusic, stopMusic, setMuted,
+    play, playVoice, resume, startMusic, startCastleMusic, startInvincibilityMusic, startLevelCompleteMusic, startCastleCompleteMusic, stopMusic, setMuted,
     startWolves, stopWolves, startHorror, stopHorror,
     preloadVoices: loadVoices,
     isMuted: () => muted,
-    isMusicOn: () => musicOn,
+    isMusicOn: () => !!currentBgm,
     hasVoice: (name) => !!voiceBuffers[name],
   };
 })();

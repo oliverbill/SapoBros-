@@ -1,6 +1,6 @@
 {
-  "name": "Sapo Bros — Aventura no Bosque",
-  "short_name": "Sapo Bros",
+  "name": "SapoBros Novo",
+  "short_name": "SapoBros Novo",
   "description": "Jogo de plataforma estilo Super Mario Bros com os sapos Jones e Minja.",
   "start_url": "./index.html",
   "display": "fullscreen",

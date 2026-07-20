@@ -72,7 +72,7 @@ try {
   // ---------- 1. Tela inicial ----------
   {
     const { ctx, page } = await newGame();
-    check("título é 'Sapo Bros'", (await page.title()).includes("Sapo Bros"));
+    check("título contém o nome do app", (await page.title()).includes("SapoBros"), await page.title());
     check("hook de debug ativo", await page.evaluate(() => !!window.__DINO));
     check("dois personagens na seleção", (await page.$$("#charPick .char")).length === 2);
     const names = await page.evaluate(() => Array.from(document.querySelectorAll("#charPick .char b")).map(b => b.textContent));
